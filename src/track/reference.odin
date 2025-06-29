@@ -5,16 +5,19 @@ import fp "core:path/filepath"
 import st "core:strings"
 import rl "vendor:raylib"
 
+
 FileReference :: union {
 	ModelReference,
 	TextureReference,
 }
 
 ModelReference :: struct {
-	model:      rl.Model,
-	meshLayers: []StaticLayer,
-	path_obj:   string,
-	path_mtl:   string,
+	model:        rl.Model,
+	meshLayers:   []StaticLayer,
+	path_obj:     string,
+	materials:    []rl.Material,
+	meshMaterial: []int,
+	textureIdx:   []^TextureReference,
 }
 
 TextureReference :: struct {
@@ -50,16 +53,24 @@ try_load_file :: proc(path: string) -> FileReference {
 		mref := ModelReference {
 			model    = rl.LoadModel(st.clone_to_cstring(path, allocator)),
 			path_obj = path,
-			path_mtl = fp.join(
-				{fp.dir(path, allocator), st.join({fp.stem(path), ".mtl"}, "", allocator)},
-				allocator,
-			),
 		}
 		mref.meshLayers = make([]StaticLayer, mref.model.meshCount)
 		// unload default materials, coz we use our materials anyway
 		for matIdx in 0 ..< mref.model.materialCount {
 			rl.MemFree(mref.model.materials[matIdx].maps)
 		}
+		rl.MemFree(mref.model.materials)
+		mref.model.materials = make([^]rl.Material, mref.model.meshCount)
+		mref.model.materialCount = mref.model.meshCount
+		for i in 0 ..< mref.model.meshCount {
+			mref.model.meshMaterial[i] = i
+		}
+		mref.materials = make([]rl.Material, mref.model.meshCount)
+		mref.meshMaterial = make([]int, mref.model.meshCount)
+		for &m in mref.materials {
+			m = rl.LoadMaterialDefault()
+		}
+		mref.textureIdx = make([]^TextureReference, mref.model.meshCount)
 		ref = mref
 	case ".png", ".jpg":
 		tref := TextureReference {
@@ -79,7 +90,7 @@ delete_reference :: proc(idx: int) {
 		rl.UnloadTexture(r.texture)
 	case ModelReference:
 		rl.MemFree(r.model.meshMaterial)
-		rl.MemFree(r.model.materials)
+		free(r.model.materials)
 		for i in 0 ..< r.model.meshCount {
 			rl.UnloadMesh(r.model.meshes[i])
 		}
@@ -87,13 +98,16 @@ delete_reference :: proc(idx: int) {
 		rl.MemFree(r.model.bones)
 		rl.MemFree(r.model.bindPose)
 		delete(r.meshLayers)
+		for m in r.materials {
+			rl.UnloadMaterial(m)
+		}
+		delete(r.materials)
+		delete(r.textureIdx)
 	}
 }
 
 clear_references :: proc() {
-	when ODIN_DEBUG do fmt.println("clearing file references...")
 	for ref, ri in references {
-		when ODIN_DEBUG do fmt.println("clearing file reference", ref, "...")
 		delete_reference(ri)
 	}
 	clear(&references)
@@ -102,5 +116,4 @@ clear_references :: proc() {
 delete_references :: proc() {
 	clear_references()
 	delete(references)
-	when ODIN_DEBUG do fmt.println("file references unloaded")
 }

@@ -3,6 +3,7 @@ package main
 import "clay"
 import "core:c/libc"
 import "core:fmt"
+import sv "core:strconv"
 import st "core:strings"
 import "core:unicode/utf8"
 import "track"
@@ -37,6 +38,7 @@ current_tab: proc() = track_tab
 selectedInputField: ^InputFieldData = nil
 selectorBuilder: st.Builder
 selectedModelReferenceIdx: int = -1
+editedMaterialIndex: int
 
 InputFieldData :: struct {
 	builder: st.Builder,
@@ -221,6 +223,53 @@ EnumSelector :: proc(
 	}
 }
 
+NumberSelector :: proc(id: string, val: ^int, max_val: int, builder: ^st.Builder) {
+	if clay.UI()(
+	{
+		id = clay.ID(id),
+		layout = {
+			layoutDirection = .LeftToRight,
+			sizing = sizingFitVert,
+			childAlignment = {x = .Center, y = .Center},
+		},
+		backgroundColor = COLOR_BG_2,
+		cornerRadius = clay.CornerRadiusAll(4),
+	},
+	) {
+		st.builder_reset(builder)
+		fmt.sbprintf(builder, "%s_prev", id)
+		if Button(st.to_string(builder^), "<", selectorButtonSizing) {
+			if val^ == 0 {
+				val^ = max_val
+			} else {
+				val^ -= 1
+			}
+		}
+		if clay.UI()(
+		{layout = {sizing = sizingExpand, childAlignment = {x = .Center, y = .Center}}},
+		) {
+			st.builder_reset(builder)
+			st.write_int(builder, val^)
+
+			clay.TextDynamic(
+				st.clone(st.to_string(builder^), context.temp_allocator),
+				clay.TextConfig(
+					{fontId = 0, fontSize = 20, textColor = COLOR_WHITE, textAlignment = .Center},
+				),
+			)
+		}
+		st.builder_reset(builder)
+		fmt.sbprintf(builder, "%s_next", id)
+		if Button(st.to_string(builder^), ">", selectorButtonSizing) {
+			if val^ == max_val {
+				val^ = 0
+			} else {
+				val^ += 1
+			}
+		}
+	}
+}
+
 VerticalSeparator :: proc(size: clay.SizingAxis) {
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow({}), height = size}}}) {}
 }
@@ -254,19 +303,25 @@ base_layout :: proc() -> Layout {
 			if Button("btnTabTrack", "Track") {
 				current_tab = track_tab
 				mouse_state_idle = mouse_state_idle_track
+				render_scene = render_track_mode
 			}
 			if Button("btnTabStart", "Objects") {
 				current_tab = object_tab
+				render_scene = render_material_mode
 			}
 			if Button("btnTabPath", "Path") {
 				current_tab = path_tab
+				render_scene = render_material_mode
 			}
 			if Button("btnTabMaterials", "Materials") {
 				current_tab = materials_tab
+				mouse_state_idle = mouse_state_idle_material
+				render_scene = render_material_mode
 			}
 			if Button("btnTabInfo", "Info") {
 				current_tab = info_tab
 				mouse_state_idle = mouse_state_idle_info
+				render_scene = render_material_mode
 			}
 		}
 		if clay.UI()(
@@ -307,6 +362,7 @@ track_tab :: proc() {
 		if Button("TrackAddModel", "Add model", sizingElem) {
 			extensions = extensions_model
 			dialogVisible = file_dialog
+			files.dirty = true
 		}
 		VerticalSeparator(clay.SizingFixed(20))
 		clay.Text("Minimap", &text_default)
@@ -330,8 +386,9 @@ track_tab :: proc() {
 			},
 			) {}
 			if Button("TrackSaveMinimap", "Save minimap", sizingElem) {
-				// TODO: save minimap
 				dialogVisible = save_file_dialog
+				extensions = extensions_texture
+				files.dirty = true
 				mouse_state = mouse_state_disabled
 				save_cbk = save_minimap
 			}
@@ -372,6 +429,45 @@ path_tab :: proc() {
 materials_tab :: proc() {
 	if clay.UI()({id = clay.ID("MaterialsContainer"), layout = tab_layout}) {
 		clay.Text("Materials", &text_header)
+		if selectedModelReferenceIdx == -1 {
+			clay.Text("Select a model to edit materials", &text_default)
+		} else {
+			ref := &(track.references[selectedModelReferenceIdx].(track.ModelReference))
+			clay.Text("Material index", &text_default)
+			NumberSelector(
+				"MaterialIndexSelector",
+				&editedMaterialIndex,
+				len(track.references[selectedModelReferenceIdx].(track.ModelReference).materials) -
+				1,
+				&selectorBuilder,
+			)
+			if clay.UI()(
+			{
+				layout = {
+					sizing = sizingFitVert,
+					layoutDirection = .TopToBottom,
+					childGap = 8,
+					padding = clay.PaddingAll(8),
+				},
+				backgroundColor = COLOR_BG_2,
+			},
+			) {
+				if clay.UI()(
+				{layout = {sizing = sizingElem, childAlignment = {x = .Left, y = .Center}}},
+				) {
+					clay.Text("Texture", &text_default)
+					if clay.UI()({layout = {sizing = sizingExpand}}) {}
+					if clay.UI()(
+					{
+						id = clay.ID("MaterialTexturePicker"),
+						layout = {},
+						image = {&ref.textureIdx[editedMaterialIndex].texture},
+						aspectRatio = {1},
+					},
+					) {}
+				}
+			}
+		}
 	}
 }
 info_tab :: proc() {
@@ -386,10 +482,13 @@ info_tab :: proc() {
 			if Button("btnInfoOpen", "Open") {
 				extensions = extensions_level
 				dialogVisible = file_dialog
+				files.dirty = true
 			}
 			if Button("btnInfoSave", "Save") {
+				extensions = extensions_level
 				dialogVisible = save_file_dialog
 				save_cbk = save
+				files.dirty = true
 			}
 		}
 	}

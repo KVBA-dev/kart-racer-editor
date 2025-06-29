@@ -19,6 +19,16 @@ clay_error_handler :: proc "c" (errorData: clay.ErrorData) {
 	libc.printf("Something went wrong\n")
 }
 
+/* TODO:
+	  - get rid of the FileReference union
+	  - have separate reference arrays for models and textures
+	  - add a texture selector window, similar to the file selector
+	  - handle texture deletions: unordered remove
+		- for every model that uses the deleted texture, set the index to -1
+	    - reassign the texture indices of the models that use the texture with last index
+	  - implement saving and loading textures
+*/
+
 main :: proc() {
 	when ODIN_DEBUG {
 		talloc := mem.Tracking_Allocator{}
@@ -73,7 +83,6 @@ main :: proc() {
 		rl.UnloadTexture(file)
 		rl.UnloadTexture(up)
 		rl.UnloadTexture(home)
-		when ODIN_DEBUG do fmt.println("font and icons unloaded")
 	}
 
 	init_layer_materials()
@@ -115,7 +124,6 @@ main :: proc() {
 		cam_rotation = rl.Quaternion(1),
 		cam          = &cam,
 	}
-	extensions = {".obj"}
 
 	defer track.delete_references()
 
@@ -159,7 +167,7 @@ main :: proc() {
 			if dialogVisible == nil {
 				rl.BeginMode3D(cam)
 				{
-					render_track_mode()
+					render_scene()
 					rl.DrawGrid(50, 5)
 				}
 				rl.EndMode3D()
@@ -182,21 +190,27 @@ load_font :: proc(path: cstring, size: i32) -> int {
 }
 
 save :: proc() {
-	modelCount := 0
 	models := make([dynamic]track.ModelReference)
 	defer delete(models)
+	save_path := fp.join(
+		{input_field_text(&currentPath), input_field_text(&saveFileName)},
+		context.temp_allocator,
+	)
 	for &r in track.references {
 		if mref, ok := r.(track.ModelReference); ok {
-			modelCount += 1
 			append(&models, mref)
 		}
 	}
 	track_def := track.Track {
-		staticModels = make([]track.StaticModel, modelCount),
+		staticModels = make([]track.StaticModel, len(models)),
 		minimap = {offset = minimapCam.position.xz, zoom = minimapCam.fovy},
 	}
 	for &sm, i in track_def.staticModels {
-		sm.filepath = models[i].path_obj
+		sm.filepath, _ = fp.rel(
+			input_field_text(&currentPath),
+			models[i].path_obj,
+			context.temp_allocator,
+		)
 		sm.materials = nil
 		sm.meshes = make([]track.StaticMesh, len(models[i].meshLayers))
 		for &smm, ii in sm.meshes {
@@ -210,10 +224,6 @@ save :: proc() {
 		}
 		delete(track_def.staticModels)
 	}
-	save_path := fp.join(
-		{input_field_text(&currentPath), input_field_text(&saveFileName)},
-		context.temp_allocator,
-	)
 
 	if !save_cbor(save_path, track_def) {
 		fmt.println("error on saving")
@@ -230,14 +240,17 @@ load :: proc() {
 		fmt.println("error on loading")
 		return
 	}
-	when ODIN_DEBUG do fmt.println(track_def)
 	track.clear_references()
 	for &sm in track_def.staticModels {
-		ref := track.try_load_file(sm.filepath)
+		fpath, err := fp.clean(
+			fp.join({input_field_text(&currentPath), sm.filepath}, context.temp_allocator),
+			context.temp_allocator,
+		)
+		if err != nil do panic(fmt.tprint("error:", sm.filepath, "doesn't exist"))
+		ref := track.try_load_file(fpath)
 
 		mref := ref.(track.ModelReference)
 		mref.meshLayers = make([]track.StaticLayer, len(sm.meshes))
-		when ODIN_DEBUG do fmt.println(len(sm.meshes))
 
 		for &smm in sm.meshes {
 			mref.meshLayers[smm.idx] = smm.layer

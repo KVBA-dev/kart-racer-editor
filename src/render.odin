@@ -43,6 +43,7 @@ destroy_layer_materials :: proc() {
 	when ODIN_DEBUG do fmt.println("layer materials unloaded")
 }
 
+render_scene: proc() = render_track_mode
 
 render_track_mode :: proc() {
 	for &r in track.references {
@@ -62,5 +63,17 @@ render_track_mode :: proc() {
 			}
 		}
 		rl.DrawModel(m.model, {0, 0, 0}, 1, rl.WHITE)
+	}
+}
+
+render_material_mode :: proc() {
+	for &r in track.references {
+		m: ^track.ModelReference
+		m_ok: bool
+		if m, m_ok = &r.(track.ModelReference); !m_ok do continue
+		for i in 0 ..< m.model.meshCount {
+			mat := m.materials[m.meshMaterial[i]]
+			rl.DrawMesh(m.model.meshes[i], mat, rl.Matrix(1))
+		}
 	}
 }

@@ -120,11 +120,12 @@ clay_rl_render :: proc(
 				)
 			case:
 				img := cast(^rl.Texture)config.imageData
-				rl.DrawTextureEx(
+				rl.DrawTexturePro(
 					img^,
-					{bounds.x, bounds.y},
+					{0, 0, f32(img.width), f32(img.height)},
+					{bounds.x, bounds.y, bounds.width, bounds.height},
+					{0, 0},
 					0,
-					bounds.width / f32(img^.width),
 					clay_color_to_rl_color(tint),
 				)
 			}

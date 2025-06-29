@@ -151,3 +151,48 @@ mouse_state_drag_minimap :: proc(using data: ^MouseData) {
 	minimapCam.position.xz -= delta
 	minimapCam.target.xz -= delta
 }
+
+mouse_state_idle_material :: proc(using data: ^MouseData) {
+	scroll_amount = rl.GetMouseWheelMove()
+	if clay.PointerOver(clay.ID("Sidebar")) {
+		mouse_state = mouse_state_ui
+		highlightedMesh = nil
+		return
+	}
+	if rl.IsMouseButtonPressed(.RIGHT) {
+		mouse_state = mouse_state_pan
+		rl.HideCursor()
+		return
+	}
+	if rl.IsMouseButtonPressed(.LEFT) {
+		mouse_state = mouse_state_select_material
+		return
+	}
+}
+
+mouse_state_select_material :: proc(using data: ^MouseData) {
+	if rl.IsMouseButtonReleased(.LEFT) {
+		mouse_state = mouse_state_idle
+		selectedMesh = nil
+		selectedLayer = nil
+		selectedModelReferenceIdx = -1
+		max_hit_dist: f32 = math.F32_MAX
+		ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), cam^)
+		for &r, ri in track.references {
+			m: ^track.ModelReference
+			m_ok: bool
+			if m, m_ok = &r.(track.ModelReference); !m_ok do continue
+			if !rl.GetRayCollisionBox(ray, rl.GetModelBoundingBox(m.model)).hit do continue
+			for i in 0 ..< m.model.meshCount {
+				hitinfo := rl.GetRayCollisionMesh(ray, m.model.meshes[i], rl.Matrix(1))
+				if !hitinfo.hit do continue
+				if hitinfo.distance < max_hit_dist {
+					max_hit_dist = hitinfo.distance
+					selectedModelReferenceIdx = ri
+					editedMaterialIndex = 0
+				}
+			}
+		}
+		return
+	}
+}

@@ -19,7 +19,7 @@ init_minimap :: proc() {
 	minimapCam = rl.Camera3D {
 		up         = {0, 0, -1},
 		projection = .ORTHOGRAPHIC,
-		position   = {0, 100, 0},
+		position   = {0, 500, 0},
 		fovy       = 400,
 	}
 	minimapMaterials[.NoCollision] = rl.LoadMaterialDefault()
@@ -80,24 +80,12 @@ render_minimap :: proc() {
 
 				for i in 0 ..< m.model.meshCount {
 					layer := m.meshLayers[i]
+					if layer == .NoCollision || layer == .Ground do continue
 					matIdx := m.model.meshMaterial[i]
-					when ODIN_DEBUG do fmt.printfln("m.model.materials = %p", m.model.materials)
-					m.model.materials[matIdx] = minimapMaterials[layer]
-				}
-				when ODIN_DEBUG {
-					fmt.println("minimap: rendering model...")
-					fmt.println("mesh materials:")
-					for ii in 0 ..< m.model.meshCount {
-						fmt.println(m.model.meshMaterial[ii])
-					}
-					fmt.println("materials:")
-					for ii in 0 ..< m.model.materialCount {
-						fmt.println(m.model.materials[ii])
-					}
+					mat := minimapMaterials[layer]
+					rl.DrawMesh(m.model.meshes[i], mat, rl.Matrix(1))
 				}
 
-				rl.DrawModel(m.model, {0, 0, 0}, 1, rl.WHITE)
-				when ODIN_DEBUG do fmt.println("done\n")
 			}
 		}
 		rl.EndMode3D()

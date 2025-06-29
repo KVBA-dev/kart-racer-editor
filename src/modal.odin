@@ -13,9 +13,11 @@ currentPath: InputFieldData
 saveFileName: InputFieldData
 dialogVisible: proc() -> Layout = nil
 save_cbk: proc()
+load_cbk: proc(_: ^track.FileReference) = nil
 
 extensions_model := []string{".obj"}
 extensions_level := []string{".klv"}
+extensions_texture := []string{".png", ".jpg"}
 
 extensions: []string
 
@@ -164,17 +166,20 @@ file_dialog :: proc() -> Layout {
 		) {
 			paths := st.to_string(files.files)
 			for f in st.split_lines_iterator(&paths) {
-				if path, clicked := file_list_item(f, COLOR_BG_2); clicked {
-					if os.is_dir(path) {
-						fmt.sbprintf(&currentPath.builder, "/%s", fp.base(path))
+				if _, clicked := file_list_item(f, COLOR_BG_2); clicked {
+					if os.is_dir(f) {
+						fmt.sbprintf(&currentPath.builder, "/%s", fp.base(f))
 						files.dirty = true
 					} else {
-						if fp.ext(path) == ".klv" {
+						if fp.ext(f) == ".klv" {
 							st.builder_reset(&saveFileName.builder)
-							fmt.sbprint(&saveFileName.builder, fp.base(path))
+							fmt.sbprint(&saveFileName.builder, fp.base(f))
 							load()
-						} else if ref := track.try_load_file(path); ref != nil {
+						} else if ref := track.try_load_file(st.clone(f)); ref != nil {
 							append(&track.references, ref)
+							if load_cbk != nil {
+								load_cbk(&track.references[len(track.references) - 1])
+							}
 						}
 						dialogVisible = nil
 						mouse_state = mouse_state_idle
@@ -279,6 +284,9 @@ save_file_dialog :: proc() -> Layout {
 					if os.is_dir(path) {
 						fmt.sbprintf(&currentPath.builder, "/%s", fp.base(path))
 						files.dirty = true
+					} else {
+						st.builder_reset(&saveFileName.builder)
+						fmt.sbprintf(&saveFileName.builder, fp.base(path))
 					}
 					break
 				}
