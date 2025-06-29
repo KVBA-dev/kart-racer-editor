@@ -1,20 +1,246 @@
 package main
 
+import "clay"
+import "core:c/libc"
+import "core:fmt"
+import la "core:math/linalg"
+import "core:mem"
+import os "core:os/os2"
+import fp "core:path/filepath"
+import "track"
 import rl "vendor:raylib"
 
-WINDOW_WIDTH :: 1024
-WINDOW_HEIGHT :: 768
+WINDOW_WIDTH :: 1920
+WINDOW_HEIGHT :: 1080
+
+dir, file, up, home: rl.Texture
+
+clay_error_handler :: proc "c" (errorData: clay.ErrorData) {
+	libc.printf("Something went wrong\n")
+}
 
 main :: proc() {
-    rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "kart-racer-editor")
-    defer rl.CloseWindow()
+	when ODIN_DEBUG {
+		talloc := mem.Tracking_Allocator{}
+		mem.tracking_allocator_init(&talloc, context.allocator)
+		context.allocator = mem.tracking_allocator(&talloc)
+		defer {
+			if len(talloc.allocation_map) > 0 {
+				fmt.eprintfln("===== Allocations not freed: %v =====", len(talloc.allocation_map))
+				for _, entry in talloc.allocation_map {
+					fmt.eprintfln(" - %v bytes at %v", entry.size, entry.location)
+				}
+			}
+			if len(talloc.bad_free_array) > 0 {
+				fmt.eprintfln("===== Bad frees: %v =====", len(talloc.bad_free_array))
+				for entry in talloc.bad_free_array {
+					fmt.eprintfln(" = %p at @%v", entry.memory, entry.location)
+				}
+			}
+		}
+	}
 
-    for !rl.WindowShouldClose() {
-        rl.BeginDrawing()
-        {
-            rl.ClearBackground(rl.WHITE)
-			rl.DrawText("Hello, world!", 20, 20, 20, rl.RED)
-        }
-        rl.EndDrawing()
-    }
+	rl.InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "kart-racer-editor")
+	defer rl.CloseWindow()
+
+	rl.SetWindowState({.WINDOW_RESIZABLE, .WINDOW_MAXIMIZED})
+	screenSize := [2]i32{rl.GetScreenWidth(), rl.GetScreenHeight()}
+	rl.SetWindowSize(screenSize.x, screenSize.y)
+	cam := rl.Camera3D {
+		projection = .PERSPECTIVE,
+		position   = {0, 1, -5},
+		up         = {0, 1, 0},
+		fovy       = 75,
+		target     = {0, 1, 0},
+	}
+	rl.SetExitKey(nil)
+
+	load_font("res/fonts/Roboto.ttf", 50)
+	dir = rl.LoadTexture("res/sprites/dir.png")
+	file = rl.LoadTexture("res/sprites/file.png")
+	up = rl.LoadTexture("res/sprites/up.png")
+	home = rl.LoadTexture("res/sprites/home.png")
+	rl.SetTextureFilter(dir, .BILINEAR)
+	rl.SetTextureFilter(file, .BILINEAR)
+	rl.SetTextureFilter(up, .BILINEAR)
+	rl.SetTextureFilter(home, .BILINEAR)
+	defer {
+		for f in rlFonts {
+			rl.UnloadFont(f)
+		}
+		delete(rlFonts)
+		rl.UnloadTexture(dir)
+		rl.UnloadTexture(file)
+		rl.UnloadTexture(up)
+		rl.UnloadTexture(home)
+		when ODIN_DEBUG do fmt.println("font and icons unloaded")
+	}
+
+	init_layer_materials()
+	defer destroy_layer_materials()
+
+	init_selector_builder()
+	defer destroy_selector_builder()
+
+	init_minimap()
+	defer destroy_minimap()
+
+	startPath: string
+	oerr: os.Error
+	init_files_array()
+	defer delete_files_array()
+	if startPath, oerr = os.get_executable_directory(context.allocator); oerr != nil {
+		return
+	}
+	fmt.sbprint(&currentPath.builder, startPath)
+	delete(startPath)
+	defer destroy_input_field(&currentPath)
+
+	clay_mem_size := clay.MinMemorySize()
+	clay_mem := make([^]u8, clay_mem_size)
+	defer free(clay_mem)
+	clay_arena := clay.CreateArenaWithCapacityAndMemory(cast(uint)clay_mem_size, clay_mem)
+	clay.Initialize(
+		clay_arena,
+		{width = cast(f32)screenSize.x, height = cast(f32)screenSize.y},
+		{handler = clay_error_handler},
+	)
+	clay.SetMeasureTextFunction(measure_text, nil)
+	layout: clay.ClayArray(clay.RenderCommand)
+
+	cam_dist: f32 = 5
+	cam_forw: rl.Vector3 = {0, 0, 1}
+	dt: f32
+	md = MouseData {
+		cam_rotation = rl.Quaternion(1),
+		cam          = &cam,
+	}
+	extensions = {".obj"}
+
+	defer track.delete_references()
+
+	for !rl.WindowShouldClose() {
+		screenSize := [2]i32{rl.GetScreenWidth(), rl.GetScreenHeight()}
+		dt = rl.GetFrameTime()
+		clay.SetLayoutDimensions({width = cast(f32)screenSize.x, height = cast(f32)screenSize.y})
+		clay.UpdateScrollContainers(true, rl.GetMouseWheelMoveV() * 3, rl.GetFrameTime())
+		clay.SetPointerState(rl.GetMousePosition(), rl.IsMouseButtonDown(.LEFT))
+		if rl.IsKeyPressed(.F11) {
+			clay.SetDebugModeEnabled(!clay.IsDebugModeEnabled())
+		}
+
+		if dialogVisible != nil do layout = dialogVisible()
+		else do layout = base_layout()
+
+		cam_forw = la.quaternion_mul_vector3(md.cam_rotation, rl.Vector3{0, 0, 1})
+		md.cam_right = rl.Vector3CrossProduct(cam_forw, cam.up)
+
+		if selectedInputField == nil {
+			cam_movement :=
+				(axis(.D, .A) * md.cam_right) +
+				(axis(.W, .S) * cam_forw) +
+				(axis(.SPACE, .LEFT_SHIFT) * cam.up)
+			cam.target += cam_movement * (rl.IsKeyDown(.LEFT_CONTROL) ? 20 : 10) * dt
+		} else {
+			edit_input_field(selectedInputField)
+		}
+
+		mouse_state(&md)
+
+		mouseScroll := md.scroll_amount
+		cam_dist = la.clamp(cam_dist - mouseScroll, .1, 50)
+
+		cam.position = cam.target - cam_forw * cam_dist
+
+		rl.BeginDrawing()
+		{
+			render_minimap()
+			rl.ClearBackground(rl.WHITE)
+			if dialogVisible == nil {
+				rl.BeginMode3D(cam)
+				{
+					render_track_mode()
+					rl.DrawGrid(50, 5)
+				}
+				rl.EndMode3D()
+			}
+			clay_rl_render(&layout)
+		}
+		rl.EndDrawing()
+	}
+}
+
+axis :: proc(pos, neg: rl.KeyboardKey) -> f32 {
+	return (rl.IsKeyDown(pos) ? 1 : 0) - (rl.IsKeyDown(neg) ? 1 : 0)
+}
+
+load_font :: proc(path: cstring, size: i32) -> int {
+	append(&rlFonts, rl.LoadFontEx(path, size, nil, 255))
+	fontIdx := len(rlFonts) - 1
+	rl.SetTextureFilter(rlFonts[fontIdx].texture, .BILINEAR)
+	return fontIdx
+}
+
+save :: proc() {
+	modelCount := 0
+	models := make([dynamic]track.ModelReference)
+	defer delete(models)
+	for &r in track.references {
+		if mref, ok := r.(track.ModelReference); ok {
+			modelCount += 1
+			append(&models, mref)
+		}
+	}
+	track_def := track.Track {
+		staticModels = make([]track.StaticModel, modelCount),
+	}
+	for &sm, i in track_def.staticModels {
+		sm.filepath = models[i].path_obj
+		sm.materials = nil
+		sm.meshes = make([]track.StaticMesh, len(models[i].meshLayers))
+		for &smm, ii in sm.meshes {
+			smm.idx = cast(i32)ii
+			smm.layer = models[i].meshLayers[ii]
+		}
+	}
+	defer {
+		for &sm in track_def.staticModels {
+			delete(sm.meshes)
+		}
+		delete(track_def.staticModels)
+	}
+	save_path := fp.join(
+		{input_field_text(&currentPath), input_field_text(&saveFileName)},
+		context.temp_allocator,
+	)
+
+	if !save_cbor(save_path, track_def) {
+		fmt.println("error on saving")
+	}
+}
+
+load :: proc() {
+	track_def := track.Track{}
+	load_path := fp.join(
+		{input_field_text(&currentPath), input_field_text(&saveFileName)},
+		context.temp_allocator,
+	)
+	if !load_cbor(load_path, &track_def) {
+		fmt.println("error on loading")
+		return
+	}
+	when ODIN_DEBUG do fmt.println(track_def)
+	track.clear_references()
+	for &sm in track_def.staticModels {
+		ref := track.try_load_file(sm.filepath)
+
+		mref := ref.(track.ModelReference)
+		mref.meshLayers = make([]track.StaticLayer, len(sm.meshes))
+		when ODIN_DEBUG do fmt.println(len(sm.meshes))
+
+		for &smm in sm.meshes {
+			mref.meshLayers[smm.idx] = smm.layer
+		}
+		append(&track.references, mref)
+	}
 }

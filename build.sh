@@ -1,1 +1,1 @@
-odin build src -out:bin/kart-racer-editor
+odin run src -out:bin/kart-racer-editor

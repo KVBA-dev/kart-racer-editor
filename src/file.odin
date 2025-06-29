@@ -1,6 +1,7 @@
 package main
 
 import "core:encoding/cbor"
+import "core:fmt"
 import "core:os"
 
 save_cbor :: proc(path: string, data: any) -> bool {
@@ -14,6 +15,9 @@ load_cbor :: proc(path: string, dst: ^$T) -> bool {
 	defer delete(data)
 	if !ok do return false
 	cborerr := cbor.unmarshal(string(data), dst)
+	when ODIN_DEBUG {
+		if cborerr != nil do fmt.println("error on loading:", cborerr)
+	}
 	return cborerr == nil
 }
 
@@ -30,9 +34,11 @@ save_to :: proc(path: string, data: []u8) -> bool {
 }
 
 load_from :: proc(path: string) -> (data: []u8, ok: bool) {
+	when ODIN_DEBUG do fmt.println("Attempting to open", path)
 	handle, fileerr := os.open(path, os.O_RDONLY, 0o666)
 	defer os.close(handle)
 	if fileerr != nil {
+		when ODIN_DEBUG do fmt.println(fileerr)
 		return nil, false
 	}
 	data, ok = os.read_entire_file(path)
