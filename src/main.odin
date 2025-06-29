@@ -133,7 +133,7 @@ main :: proc() {
 		else do layout = base_layout()
 
 		cam_forw = la.quaternion_mul_vector3(md.cam_rotation, rl.Vector3{0, 0, 1})
-		md.cam_right = rl.Vector3CrossProduct(cam_forw, cam.up)
+		md.cam_right = la.normalize(la.cross(cam_forw, cam.up))
 
 		if selectedInputField == nil {
 			cam_movement :=
@@ -193,6 +193,7 @@ save :: proc() {
 	}
 	track_def := track.Track {
 		staticModels = make([]track.StaticModel, modelCount),
+		minimap = {offset = minimapCam.position.xz, zoom = minimapCam.fovy},
 	}
 	for &sm, i in track_def.staticModels {
 		sm.filepath = models[i].path_obj
@@ -243,4 +244,9 @@ load :: proc() {
 		}
 		append(&track.references, mref)
 	}
+
+	minimapCam.position.xz = track_def.minimap.offset
+	minimapCam.target.xz = track_def.minimap.offset
+	minimapCam.fovy = track_def.minimap.zoom
+
 }
