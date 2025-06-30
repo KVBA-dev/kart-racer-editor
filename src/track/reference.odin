@@ -68,6 +68,9 @@ try_load_file :: proc(path: string) -> FileReference {
 			m = rl.LoadMaterialDefault()
 		}
 		mref.textureIdx = make([]^TextureReference, mref.model.meshCount)
+		for &mti in mref.textureIdx {
+			mti = nil
+		}
 		ref = mref
 	case ".png", ".jpg":
 		for t in textureReferences {
@@ -101,6 +104,21 @@ delete_model_reference :: proc(idx: int) {
 	}
 	delete(r.materials)
 	delete(r.textureIdx)
+}
+
+delete_texture_reference :: proc(idx: int) {
+	last_idx := len(textureReferences) - 1
+	for &model in modelReferences {
+		for &tex in model.textureIdx {
+			if tex == &textureReferences[idx] {
+				tex = nil
+			} else if tex == &textureReferences[last_idx] {
+				tex = &textureReferences[idx]
+			}
+		}
+	}
+	rl.UnloadTexture(textureReferences[idx].texture)
+	unordered_remove(&textureReferences, idx)
 }
 
 clear_references :: proc() {

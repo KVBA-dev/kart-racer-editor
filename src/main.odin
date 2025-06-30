@@ -20,11 +20,9 @@ clay_error_handler :: proc "c" (errorData: clay.ErrorData) {
 }
 
 /* TODO:
-	  - add a texture selector window, similar to the file selector
 	  - handle texture deletions: unordered remove
 		- for every model that uses the deleted texture, set the index to -1
 	    - reassign the texture indices of the models that use the texture with last index
-	  - implement saving and loading textures
 */
 
 main :: proc() {

@@ -368,7 +368,7 @@ file_list_item :: proc(filepath: string, col: clay.Color) -> (path: string, clic
 	return
 }
 
-
+deleted_idx := -1
 select_texture_dialog :: proc() -> Layout {
 	if rl.IsKeyPressed(.ESCAPE) {
 		mouse_state = mouse_state_idle
@@ -450,6 +450,10 @@ select_texture_dialog :: proc() -> Layout {
 			}
 		}
 	}
+	if deleted_idx > -1 {
+		track.delete_texture_reference(deleted_idx)
+		deleted_idx = -1
+	}
 	return clay.EndLayout()
 }
 
@@ -460,8 +464,10 @@ select_texture_item :: proc(
 	out_ref: ^track.TextureReference,
 	clicked: bool,
 ) {
-	id := clay.ID(ref.path if ref != nil else "NoTexture")
+	_id := ref.path if ref != nil else "NoTexture"
+	id := clay.ID(_id)
 	out_ref = ref
+	del_clicked: bool = false
 	col := COLOR_BUTTON if clay.PointerOver(id) else col
 	if clay.UI()(
 	{
@@ -489,8 +495,22 @@ select_texture_item :: proc(
 				{textColor = COLOR_WHITE, fontId = 0, fontSize = 18, textAlignment = .Left},
 			),
 		)
+		if clay.UI()({layout = {sizing = sizingExpand}}) {}
+		if ImageButton(
+			st.join({_id, "_delete"}, "", context.temp_allocator),
+			&minus,
+			{clay.SizingFixed(64), clay.SizingFixed(64)},
+		) {
+			for &tr, i in track.textureReferences {
+				if &tr == ref {
+					deleted_idx = i
+					del_clicked = true
+					break
+				}
+			}
+		}
 	}
 
-	clicked = clay.PointerOver(id) && rl.IsMouseButtonPressed(.LEFT)
+	clicked = clay.PointerOver(id) && rl.IsMouseButtonPressed(.LEFT) && !del_clicked
 	return
 }
