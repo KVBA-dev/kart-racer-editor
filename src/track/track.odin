@@ -59,3 +59,11 @@ MinimapSettings :: struct {
 	offset: rl.Vector2,
 	zoom:   f32,
 }
+
+destroy_track :: proc(t: ^Track) {
+	for &sm in t.staticModels {
+		delete(sm.meshes)
+		delete(sm.materials)
+	}
+	delete(t.staticModels)
+}

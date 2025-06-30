@@ -107,6 +107,7 @@ clay_rl_render :: proc(
 			}
 
 			imageTexture := config.imageData
+			if imageTexture == nil do break
 			switch {
 			case imageTexture in renderTextures:
 				img := cast(^rl.RenderTexture)config.imageData

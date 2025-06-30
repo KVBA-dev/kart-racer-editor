@@ -362,6 +362,7 @@ track_tab :: proc() {
 		if Button("TrackAddModel", "Add model", sizingElem) {
 			extensions = extensions_model
 			dialogVisible = file_dialog
+			load_cbk = model_loaded
 			files.dirty = true
 		}
 		VerticalSeparator(clay.SizingFixed(20))
@@ -407,7 +408,7 @@ track_tab :: proc() {
 			)
 			if Button("TrackDeleteReference", "Delete model", sizingElem) {
 				if selectedModelReferenceIdx >= 0 {
-					track.delete_reference(selectedModelReferenceIdx)
+					track.delete_model_reference(selectedModelReferenceIdx)
 					selectedModelReferenceIdx = -1
 					selectedLayer = nil
 					selectedMesh = nil
@@ -432,13 +433,12 @@ materials_tab :: proc() {
 		if selectedModelReferenceIdx == -1 {
 			clay.Text("Select a model to edit materials", &text_default)
 		} else {
-			ref := &(track.references[selectedModelReferenceIdx].(track.ModelReference))
+			ref := &(track.modelReferences[selectedModelReferenceIdx])
 			clay.Text("Material index", &text_default)
 			NumberSelector(
 				"MaterialIndexSelector",
 				&editedMaterialIndex,
-				len(track.references[selectedModelReferenceIdx].(track.ModelReference).materials) -
-				1,
+				len(track.modelReferences[selectedModelReferenceIdx].materials) - 1,
 				&selectorBuilder,
 			)
 			if clay.UI()(
@@ -452,19 +452,29 @@ materials_tab :: proc() {
 				backgroundColor = COLOR_BG_2,
 			},
 			) {
+				// TODO: colour picker
 				if clay.UI()(
 				{layout = {sizing = sizingElem, childAlignment = {x = .Left, y = .Center}}},
 				) {
 					clay.Text("Texture", &text_default)
 					if clay.UI()({layout = {sizing = sizingExpand}}) {}
+					img := &ref.textureIdx[editedMaterialIndex].texture
+					if img == nil do img = &plus
 					if clay.UI()(
 					{
 						id = clay.ID("MaterialTexturePicker"),
-						layout = {},
-						image = {&ref.textureIdx[editedMaterialIndex].texture},
+						layout = {
+							sizing = {width = clay.SizingFixed(40), height = clay.SizingGrow({})},
+						},
+						image = {img},
 						aspectRatio = {1},
 					},
 					) {}
+					if clay.PointerOver(clay.ID("MaterialTexturePicker")) &&
+					   rl.IsMouseButtonPressed(.LEFT) {
+						dialogVisible = select_texture_dialog
+						mouse_state = mouse_state_disabled
+					}
 				}
 			}
 		}

@@ -13,15 +13,13 @@ import rl "vendor:raylib"
 WINDOW_WIDTH :: 1920
 WINDOW_HEIGHT :: 1080
 
-dir, file, up, home: rl.Texture
+dir, file, up, home, plus, minus, cross: rl.Texture
 
 clay_error_handler :: proc "c" (errorData: clay.ErrorData) {
 	libc.printf("Something went wrong\n")
 }
 
 /* TODO:
-	  - get rid of the FileReference union
-	  - have separate reference arrays for models and textures
 	  - add a texture selector window, similar to the file selector
 	  - handle texture deletions: unordered remove
 		- for every model that uses the deleted texture, set the index to -1
@@ -70,10 +68,16 @@ main :: proc() {
 	file = rl.LoadTexture("res/sprites/file.png")
 	up = rl.LoadTexture("res/sprites/up.png")
 	home = rl.LoadTexture("res/sprites/home.png")
+	plus = rl.LoadTexture("res/sprites/plus.png")
+	minus = rl.LoadTexture("res/sprites/minus.png")
+	cross = rl.LoadTexture("res/sprites/cross.png")
 	rl.SetTextureFilter(dir, .BILINEAR)
 	rl.SetTextureFilter(file, .BILINEAR)
 	rl.SetTextureFilter(up, .BILINEAR)
 	rl.SetTextureFilter(home, .BILINEAR)
+	rl.SetTextureFilter(plus, .BILINEAR)
+	rl.SetTextureFilter(minus, .BILINEAR)
+	rl.SetTextureFilter(cross, .BILINEAR)
 	defer {
 		for f in rlFonts {
 			rl.UnloadFont(f)
@@ -83,6 +87,9 @@ main :: proc() {
 		rl.UnloadTexture(file)
 		rl.UnloadTexture(up)
 		rl.UnloadTexture(home)
+		rl.UnloadTexture(plus)
+		rl.UnloadTexture(minus)
+		rl.UnloadTexture(cross)
 	}
 
 	init_layer_materials()
@@ -163,7 +170,7 @@ main :: proc() {
 		rl.BeginDrawing()
 		{
 			render_minimap()
-			rl.ClearBackground(rl.WHITE)
+			rl.ClearBackground(rl.Color{30, 30, 30, 255})
 			if dialogVisible == nil {
 				rl.BeginMode3D(cam)
 				{
@@ -190,39 +197,38 @@ load_font :: proc(path: cstring, size: i32) -> int {
 }
 
 save :: proc() {
-	models := make([dynamic]track.ModelReference)
-	defer delete(models)
 	save_path := fp.join(
 		{input_field_text(&currentPath), input_field_text(&saveFileName)},
 		context.temp_allocator,
 	)
-	for &r in track.references {
-		if mref, ok := r.(track.ModelReference); ok {
-			append(&models, mref)
-		}
-	}
 	track_def := track.Track {
-		staticModels = make([]track.StaticModel, len(models)),
+		staticModels = make([]track.StaticModel, len(track.modelReferences)),
 		minimap = {offset = minimapCam.position.xz, zoom = minimapCam.fovy},
 	}
+	defer track.destroy_track(&track_def)
 	for &sm, i in track_def.staticModels {
 		sm.filepath, _ = fp.rel(
 			input_field_text(&currentPath),
-			models[i].path_obj,
+			track.modelReferences[i].path_obj,
 			context.temp_allocator,
 		)
-		sm.materials = nil
-		sm.meshes = make([]track.StaticMesh, len(models[i].meshLayers))
+		sm.materials = make([]track.StaticMaterial, len(track.modelReferences[i].materials))
+		sm.meshes = make([]track.StaticMesh, len(track.modelReferences[i].meshLayers))
 		for &smm, ii in sm.meshes {
 			smm.idx = cast(i32)ii
-			smm.layer = models[i].meshLayers[ii]
+			smm.layer = track.modelReferences[i].meshLayers[ii]
 		}
-	}
-	defer {
-		for &sm in track_def.staticModels {
-			delete(sm.meshes)
+		for &smmat, ii in sm.materials {
+			smmat.idx = cast(i32)ii
+			if texpath := track.modelReferences[i].textureIdx[ii]; texpath == nil {
+				smmat.albedo = ""
+			} else {
+				smmat.albedo, _ = fp.rel(
+					input_field_text(&currentPath),
+					track.modelReferences[i].textureIdx[ii].path,
+				)
+			}
 		}
-		delete(track_def.staticModels)
 	}
 
 	if !save_cbor(save_path, track_def) {
@@ -240,6 +246,7 @@ load :: proc() {
 		fmt.println("error on loading")
 		return
 	}
+	defer track.destroy_track(&track_def)
 	track.clear_references()
 	for &sm in track_def.staticModels {
 		fpath, err := fp.clean(
@@ -250,12 +257,30 @@ load :: proc() {
 		ref := track.try_load_file(fpath)
 
 		mref := ref.(track.ModelReference)
-		mref.meshLayers = make([]track.StaticLayer, len(sm.meshes))
-
 		for &smm in sm.meshes {
 			mref.meshLayers[smm.idx] = smm.layer
 		}
-		append(&track.references, mref)
+
+		matloop: for &smmat in sm.materials {
+			if smmat.albedo == "" {
+				continue
+			}
+			fpath, err := fp.clean(
+				fp.join({input_field_text(&currentPath), smmat.albedo}, context.temp_allocator),
+				context.temp_allocator,
+			)
+			for &tref in track.textureReferences {
+				if fpath == tref.path {
+					mref.textureIdx[smmat.idx] = &tref
+					continue matloop
+				}
+			}
+			tex_ref := track.try_load_file(fpath).(track.TextureReference)
+			append(&track.textureReferences, tex_ref)
+			mref.textureIdx[smmat.idx] = &track.textureReferences[len(track.textureReferences) - 1]
+		}
+
+		append(&track.modelReferences, mref)
 	}
 
 	minimapCam.position.xz = track_def.minimap.offset

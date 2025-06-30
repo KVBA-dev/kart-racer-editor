@@ -12,8 +12,8 @@ import rl "vendor:raylib"
 currentPath: InputFieldData
 saveFileName: InputFieldData
 dialogVisible: proc() -> Layout = nil
-save_cbk: proc()
-load_cbk: proc(_: ^track.FileReference) = nil
+save_cbk: proc() = nil
+load_cbk: proc(_: track.FileReference) = nil
 
 extensions_model := []string{".obj"}
 extensions_level := []string{".klv"}
@@ -24,6 +24,18 @@ extensions: []string
 FileList :: struct {
 	files: st.Builder,
 	dirty: bool,
+}
+
+model_loaded :: proc(model: track.FileReference) {
+	append(&track.modelReferences, model.(track.ModelReference))
+	dialogVisible = nil
+	mouse_state = mouse_state_ui
+}
+
+texture_loaded :: proc(model: track.FileReference) {
+	append(&track.textureReferences, model.(track.TextureReference))
+	dialogVisible = select_texture_dialog
+	mouse_state = mouse_state_ui
 }
 
 file_list_walk_proc :: proc(
@@ -175,14 +187,13 @@ file_dialog :: proc() -> Layout {
 							st.builder_reset(&saveFileName.builder)
 							fmt.sbprint(&saveFileName.builder, fp.base(f))
 							load()
+							dialogVisible = nil
+							mouse_state = mouse_state_ui
 						} else if ref := track.try_load_file(st.clone(f)); ref != nil {
-							append(&track.references, ref)
 							if load_cbk != nil {
-								load_cbk(&track.references[len(track.references) - 1])
+								load_cbk(ref)
 							}
 						}
-						dialogVisible = nil
-						mouse_state = mouse_state_idle
 					}
 					break
 				}
@@ -354,5 +365,132 @@ file_list_item :: proc(filepath: string, col: clay.Color) -> (path: string, clic
 
 	clicked = clay.PointerOver(id) && rl.IsMouseButtonPressed(.LEFT)
 	path = abspath if clicked else ""
+	return
+}
+
+
+select_texture_dialog :: proc() -> Layout {
+	if rl.IsKeyPressed(.ESCAPE) {
+		mouse_state = mouse_state_idle
+		dialogVisible = nil
+	}
+	clay.BeginLayout()
+	if clay.UI()(
+	{
+		id = clay.ID("TextureSelectorBase"),
+		backgroundColor = COLOR_BG,
+		layout = {
+			padding = clay.PaddingAll(8),
+			sizing = sizingExpand,
+			layoutDirection = .TopToBottom,
+			childGap = 4,
+		},
+	},
+	) {
+		if clay.UI()(
+		{
+			id = clay.ID("TextureSelectorHeader"),
+			layout = {
+				sizing = {width = clay.SizingGrow({}), height = clay.SizingFit({})},
+				layoutDirection = .LeftToRight,
+				childGap = 16,
+				childAlignment = {x = .Left, y = .Center},
+			},
+		},
+		) {
+			clay.Text(
+				"Select texture",
+				clay.TextConfig({fontId = 0, textColor = COLOR_WHITE, fontSize = 48}),
+			)
+			if ImageButton(
+				"AddTexture",
+				&plus,
+				{width = clay.SizingFixed(50), height = clay.SizingGrow({})},
+			) {
+				dialogVisible = file_dialog
+				files.dirty = true
+				extensions = extensions_texture
+				load_cbk = texture_loaded
+			}
+		}
+		if clay.UI()(
+		{layout = {sizing = {width = clay.SizingGrow({}), height = clay.SizingFixed(16)}}},
+		) {}
+		if clay.UI()(
+		{
+			id = clay.ID("TextureSelectorScroll"),
+			clip = {vertical = true, childOffset = clay.GetScrollOffset()},
+			layout = {
+				layoutDirection = .TopToBottom,
+				sizing = sizingExpand,
+				padding = clay.PaddingAll(8),
+				childGap = 8,
+			},
+		},
+		) {
+			out_ref: ^track.TextureReference
+			clicked: bool
+			out_ref, clicked = select_texture_item(nil, COLOR_BG_2)
+			if clicked {
+				track.modelReferences[selectedModelReferenceIdx].textureIdx[editedMaterialIndex] =
+					out_ref
+				dialogVisible = nil
+				mouse_state = mouse_state_ui
+
+			} else {
+				for &ref in track.textureReferences {
+					if out_ref, clicked = select_texture_item(&ref, COLOR_BG_2); clicked {
+						track.modelReferences[selectedModelReferenceIdx].textureIdx[editedMaterialIndex] =
+							out_ref
+						dialogVisible = nil
+						mouse_state = mouse_state_ui
+						break
+					}
+				}
+			}
+		}
+	}
+	return clay.EndLayout()
+}
+
+select_texture_item :: proc(
+	ref: ^track.TextureReference,
+	col: clay.Color,
+) -> (
+	out_ref: ^track.TextureReference,
+	clicked: bool,
+) {
+	id := clay.ID(ref.path if ref != nil else "NoTexture")
+	out_ref = ref
+	col := COLOR_BUTTON if clay.PointerOver(id) else col
+	if clay.UI()(
+	{
+		id = id,
+		layout = {
+			padding = clay.PaddingAll(8),
+			layoutDirection = .LeftToRight,
+			sizing = {width = clay.SizingGrow({}), height = clay.SizingFixed(70)},
+			childAlignment = {x = .Left, y = .Center},
+			childGap = 8,
+		},
+		backgroundColor = col,
+	},
+	) {
+		if clay.UI()(
+		{
+			layout = {sizing = {clay.SizingFixed(64), clay.SizingFixed(64)}},
+			image = {&ref.texture if ref != nil else nil},
+			aspectRatio = {1},
+		},
+		) {}
+		clay.TextDynamic(
+			ref.path if ref != nil else "No texture",
+			clay.TextConfig(
+				{textColor = COLOR_WHITE, fontId = 0, fontSize = 18, textAlignment = .Left},
+			),
+		)
+	}
+
+	clicked = clay.PointerOver(id) && rl.IsMouseButtonPressed(.LEFT)
 	return
 }

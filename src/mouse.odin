@@ -25,10 +25,8 @@ mouse_state_idle_track :: proc(using data: ^MouseData) {
 	highlightedMesh = nil
 	max_hit_dist: f32 = math.F32_MAX
 	ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), cam^)
-	for &r in track.references {
-		m: ^track.ModelReference
-		m_ok: bool
-		if m, m_ok = &r.(track.ModelReference); !m_ok do continue
+	for &r in track.modelReferences {
+		m := &r
 		if !rl.GetRayCollisionBox(ray, rl.GetModelBoundingBox(m.model)).hit do continue
 		for i in 0 ..< m.model.meshCount {
 			hitinfo := rl.GetRayCollisionMesh(ray, m.model.meshes[i], rl.Matrix(1))
@@ -78,10 +76,8 @@ mouse_state_select_mesh :: proc(using data: ^MouseData) {
 		selectedModelReferenceIdx = -1
 		max_hit_dist: f32 = math.F32_MAX
 		ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), cam^)
-		for &r, ri in track.references {
-			m: ^track.ModelReference
-			m_ok: bool
-			if m, m_ok = &r.(track.ModelReference); !m_ok do continue
+		for &r, ri in track.modelReferences {
+			m := &r
 			if !rl.GetRayCollisionBox(ray, rl.GetModelBoundingBox(m.model)).hit do continue
 			for i in 0 ..< m.model.meshCount {
 				hitinfo := rl.GetRayCollisionMesh(ray, m.model.meshes[i], rl.Matrix(1))
@@ -178,10 +174,8 @@ mouse_state_select_material :: proc(using data: ^MouseData) {
 		selectedModelReferenceIdx = -1
 		max_hit_dist: f32 = math.F32_MAX
 		ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), cam^)
-		for &r, ri in track.references {
-			m: ^track.ModelReference
-			m_ok: bool
-			if m, m_ok = &r.(track.ModelReference); !m_ok do continue
+		for &r, ri in track.modelReferences {
+			m := &r
 			if !rl.GetRayCollisionBox(ray, rl.GetModelBoundingBox(m.model)).hit do continue
 			for i in 0 ..< m.model.meshCount {
 				hitinfo := rl.GetRayCollisionMesh(ray, m.model.meshes[i], rl.Matrix(1))

@@ -73,11 +73,8 @@ render_minimap :: proc() {
 		rl.ClearBackground(rl.BLACK)
 		rl.BeginMode3D(minimapCam)
 		{
-			for &r in track.references {
-				m: ^track.ModelReference
-				m_ok: bool
-				if m, m_ok = &r.(track.ModelReference); !m_ok do continue
-
+			for &r in track.modelReferences {
+				m := &r
 				for i in 0 ..< m.model.meshCount {
 					layer := m.meshLayers[i]
 					if layer == .NoCollision || layer == .Ground do continue
@@ -85,7 +82,6 @@ render_minimap :: proc() {
 					mat := minimapMaterials[layer]
 					rl.DrawMesh(m.model.meshes[i], mat, rl.Matrix(1))
 				}
-
 			}
 		}
 		rl.EndMode3D()

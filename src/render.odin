@@ -7,6 +7,7 @@ import rl "vendor:raylib"
 layerMaterials: [track.StaticLayer]rl.Material
 selectedMaterial: rl.Material
 highlightMaterial: rl.Material
+whitePixel: rl.Texture
 
 init_layer_materials :: proc() {
 	layerMaterials[.NoCollision] = rl.LoadMaterialDefault()
@@ -32,11 +33,16 @@ init_layer_materials :: proc() {
 
 	highlightMaterial = rl.LoadMaterialDefault()
 	highlightMaterial.maps[rl.MaterialMapIndex.ALBEDO].color = rl.YELLOW
+
+	img := rl.GenImageColor(1, 1, rl.WHITE)
+	defer rl.UnloadImage(img)
+	whitePixel = rl.LoadTextureFromImage(img)
 }
 
 destroy_layer_materials :: proc() {
 	rl.UnloadMaterial(selectedMaterial)
 	rl.UnloadMaterial(highlightMaterial)
+	rl.UnloadTexture(whitePixel)
 	for m in layerMaterials {
 		rl.UnloadMaterial(m)
 	}
@@ -46,34 +52,37 @@ destroy_layer_materials :: proc() {
 render_scene: proc() = render_track_mode
 
 render_track_mode :: proc() {
-	for &r in track.references {
-		m: ^track.ModelReference
-		m_ok: bool
-		if m, m_ok = &r.(track.ModelReference); !m_ok do continue
-
-		for i in 0 ..< m.model.meshCount {
-			layer := m.meshLayers[i]
-			matIdx := m.model.meshMaterial[i]
-			if &m.model.meshes[i] == selectedMesh {
-				m.model.materials[matIdx] = selectedMaterial
-			} else if &m.model.meshes[i] == highlightedMesh {
-				m.model.materials[matIdx] = highlightMaterial
+	for &r in track.modelReferences {
+		for i in 0 ..< r.model.meshCount {
+			layer := r.meshLayers[i]
+			matIdx := r.model.meshMaterial[i]
+			if &r.model.meshes[i] == selectedMesh {
+				r.model.materials[matIdx] = selectedMaterial
+			} else if &r.model.meshes[i] == highlightedMesh {
+				r.model.materials[matIdx] = highlightMaterial
 			} else {
-				m.model.materials[matIdx] = layerMaterials[layer]
+				r.model.materials[matIdx] = layerMaterials[layer]
 			}
 		}
-		rl.DrawModel(m.model, {0, 0, 0}, 1, rl.WHITE)
+		rl.DrawModel(r.model, {0, 0, 0}, 1, rl.WHITE)
 	}
 }
 
 render_material_mode :: proc() {
-	for &r in track.references {
-		m: ^track.ModelReference
-		m_ok: bool
-		if m, m_ok = &r.(track.ModelReference); !m_ok do continue
-		for i in 0 ..< m.model.meshCount {
-			mat := m.materials[m.meshMaterial[i]]
-			rl.DrawMesh(m.model.meshes[i], mat, rl.Matrix(1))
+	for &r in track.modelReferences {
+		for i in 0 ..< r.model.meshCount {
+			mat := r.materials[r.meshMaterial[i]]
+			if r.textureIdx[i] != nil {
+				mat.maps[rl.MaterialMapIndex.ALBEDO].texture = r.textureIdx[i].texture
+			} else {
+				mat.maps[rl.MaterialMapIndex.ALBEDO].texture = whitePixel
+			}
+			col := rl.WHITE
+			if selectedModelReferenceIdx >= 0 && int(i) == editedMaterialIndex {
+				col = rl.ColorTint(col, rl.SKYBLUE)
+			}
+			mat.maps[rl.MaterialMapIndex.ALBEDO].color = col
+			rl.DrawMesh(r.model.meshes[i], mat, rl.Matrix(1))
 		}
 	}
 }
