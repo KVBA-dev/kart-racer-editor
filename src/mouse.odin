@@ -190,3 +190,25 @@ mouse_state_select_material :: proc(using data: ^MouseData) {
 		return
 	}
 }
+
+mouse_state_float_field :: proc(using data: ^MouseData) {
+	if rl.IsMouseButtonPressed(.LEFT) {
+		mouse_state = mouse_state_edit_float_field
+		rl.HideCursor()
+		return
+	}
+}
+
+mouse_state_edit_float_field :: proc(using data: ^MouseData) {
+	editedFloatField.val^ = math.clamp(
+		-rl.GetMouseDelta().y * editedFloatField.delta + editedFloatField.val^,
+		editedFloatField.bounds.min,
+		editedFloatField.bounds.max,
+	)
+
+	if rl.IsMouseButtonUp(.LEFT) {
+		mouse_state = mouse_state_float_field
+		rl.ShowCursor()
+		return
+	}
+}

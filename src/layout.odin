@@ -3,6 +3,7 @@ package main
 import "clay"
 import "core:c/libc"
 import "core:fmt"
+import "core:math"
 import sv "core:strconv"
 import st "core:strings"
 import "core:unicode/utf8"
@@ -32,18 +33,64 @@ sizingFitVert := clay.Sizing {
 	width  = clay.SizingGrow({}),
 	height = clay.SizingFit({}),
 }
+tab_layout := clay.LayoutConfig {
+	sizing          = sizingExpand,
+	childGap        = 8,
+	layoutDirection = .TopToBottom,
+}
+
+text_header := clay.TextElementConfig {
+	textColor     = COLOR_WHITE,
+	fontSize      = 50,
+	fontId        = 0,
+	textAlignment = .Left,
+}
+
+text_default := clay.TextElementConfig {
+	textColor     = COLOR_WHITE,
+	fontSize      = 18,
+	fontId        = 0,
+	textAlignment = .Center,
+}
 
 current_tab: proc() = track_tab
 
 selectedInputField: ^InputFieldData = nil
-selectorBuilder: st.Builder
 selectedModelReferenceIdx: int = -1
 editedMaterialIndex: int
+
+strBuf: StringBuffer
 
 InputFieldData :: struct {
 	builder: st.Builder,
 	endEdit: proc(),
 	maxLen:  int,
+}
+
+StringBuffer :: struct {
+	builder:           st.Builder,
+	current_substring: string,
+}
+
+init_string_buffer :: proc(buf: ^StringBuffer) {
+	st.builder_init(&buf.builder, 20000)
+	buf.current_substring = ""
+}
+
+delete_string_buffer :: proc(buf: ^StringBuffer) {
+	st.builder_destroy(&buf.builder)
+	buf.current_substring = ""
+}
+
+reset_string_buffer :: proc(buf: ^StringBuffer) {
+	st.builder_reset(&buf.builder)
+	buf.current_substring = ""
+}
+
+append_string_buffer :: proc(buf: ^StringBuffer, str: string) {
+	curr_len := st.builder_len(buf.builder)
+	fmt.sbprint(&buf.builder, str)
+	buf.current_substring = string(buf.builder.buf[curr_len:])
 }
 
 init_input_field :: proc(capacity: int = 1024) -> InputFieldData {
@@ -132,12 +179,7 @@ Button :: proc(id, caption: string, sizing := sizingExpand) -> bool {
 		cornerRadius = clay.CornerRadiusAll(4),
 	},
 	) {
-		clay.TextDynamic(
-			caption,
-			clay.TextConfig(
-				{textColor = COLOR_WHITE, fontSize = 18, fontId = 0, textAlignment = .Left},
-			),
-		)
+		clay.TextDynamic(caption, &text_default)
 	}
 	return clay.PointerOver(clay.ID(id)) && rl.IsMouseButtonPressed(.LEFT)
 }
@@ -165,21 +207,7 @@ selectorButtonSizing := clay.Sizing {
 	height = clay.SizingGrow({}),
 }
 
-init_selector_builder :: proc() {
-	st.builder_init(&selectorBuilder)
-}
-
-destroy_selector_builder :: proc() {
-	st.builder_destroy(&selectorBuilder)
-}
-
-EnumSelector :: proc(
-	id: string,
-	val: $E/^$T,
-	max_val: T,
-	nameproc: proc(_: T) -> string,
-	builder: ^st.Builder,
-) {
+EnumSelector :: proc(id: string, val: $E/^$T, max_val: T, nameproc: proc(_: T) -> string) {
 	if clay.UI()(
 	{
 		id = clay.ID(id),
@@ -192,9 +220,8 @@ EnumSelector :: proc(
 		cornerRadius = clay.CornerRadiusAll(4),
 	},
 	) {
-		st.builder_reset(builder)
-		fmt.sbprintf(builder, "%s_prev", id)
-		if Button(st.to_string(builder^), "<", selectorButtonSizing) {
+		append_string_buffer(&strBuf, fmt.tprintf("%s_prev", id))
+		if Button(strBuf.current_substring, "<", selectorButtonSizing) {
 			if val^ == cast(T)0 {
 				val^ = max_val
 			} else {
@@ -211,9 +238,8 @@ EnumSelector :: proc(
 				),
 			)
 		}
-		st.builder_reset(builder)
-		fmt.sbprintf(builder, "%s_next", id)
-		if Button(st.to_string(builder^), ">", selectorButtonSizing) {
+		append_string_buffer(&strBuf, fmt.tprintf("%s_next", id))
+		if Button(strBuf.current_substring, ">", selectorButtonSizing) {
 			if val^ == max_val {
 				val^ = cast(T)0
 			} else {
@@ -223,7 +249,7 @@ EnumSelector :: proc(
 	}
 }
 
-NumberSelector :: proc(id: string, val: ^int, max_val: int, builder: ^st.Builder) {
+NumberSelector :: proc(id: string, val: ^int, max_val: int) {
 	if clay.UI()(
 	{
 		id = clay.ID(id),
@@ -236,9 +262,8 @@ NumberSelector :: proc(id: string, val: ^int, max_val: int, builder: ^st.Builder
 		cornerRadius = clay.CornerRadiusAll(4),
 	},
 	) {
-		st.builder_reset(builder)
-		fmt.sbprintf(builder, "%s_prev", id)
-		if Button(st.to_string(builder^), "<", selectorButtonSizing) {
+		append_string_buffer(&strBuf, fmt.tprintf("%s_prev", id))
+		if Button(strBuf.current_substring, "<", selectorButtonSizing) {
 			if val^ == 0 {
 				val^ = max_val
 			} else {
@@ -248,19 +273,17 @@ NumberSelector :: proc(id: string, val: ^int, max_val: int, builder: ^st.Builder
 		if clay.UI()(
 		{layout = {sizing = sizingExpand, childAlignment = {x = .Center, y = .Center}}},
 		) {
-			st.builder_reset(builder)
-			st.write_int(builder, val^)
+			append_string_buffer(&strBuf, fmt.tprintf("%f", val^))
 
 			clay.TextDynamic(
-				st.clone(st.to_string(builder^), context.temp_allocator),
+				strBuf.current_substring,
 				clay.TextConfig(
 					{fontId = 0, fontSize = 20, textColor = COLOR_WHITE, textAlignment = .Center},
 				),
 			)
 		}
-		st.builder_reset(builder)
-		fmt.sbprintf(builder, "%s_next", id)
-		if Button(st.to_string(builder^), ">", selectorButtonSizing) {
+		append_string_buffer(&strBuf, fmt.tprintf("%s_next", id))
+		if Button(strBuf.current_substring, ">", selectorButtonSizing) {
 			if val^ == max_val {
 				val^ = 0
 			} else {
@@ -274,7 +297,61 @@ VerticalSeparator :: proc(size: clay.SizingAxis) {
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow({}), height = size}}}) {}
 }
 
+FloatFieldBounds :: struct {
+	min, max: f32,
+}
+
+FF_NO_BOUNDS := FloatFieldBounds {
+	min = -math.F32_MAX,
+	max = math.F32_MAX,
+}
+
+FF_ABOVE_ZERO := FloatFieldBounds {
+	min = 0,
+	max = math.F32_MAX,
+}
+
+editedFloatField: struct {
+	bounds: FloatFieldBounds,
+	val:    ^f32,
+	delta:  f32,
+} = {}
+
+FloatField :: proc(
+	id: string,
+	val: ^f32,
+	bounds: ^FloatFieldBounds = nil,
+	delta: f32 = 0.1,
+	sizing := sizingElem,
+) {
+
+	bounds := bounds
+	if bounds == nil {
+		bounds = &FF_NO_BOUNDS
+	}
+	if clay.UI()(
+	{
+		id = clay.ID(id),
+		layout = {sizing = sizing, childAlignment = {x = .Center, y = .Center}},
+		backgroundColor = COLOR_BG_2,
+		cornerRadius = clay.CornerRadiusAll(4),
+	},
+	) {
+		append_string_buffer(&strBuf, fmt.tprintf("%f", val^))
+		clay.TextDynamic(strBuf.current_substring, &text_default)
+	}
+	if clay.PointerOver(clay.ID(id)) && mouse_state == mouse_state_ui {
+		mouse_state = mouse_state_float_field
+		editedFloatField.bounds = bounds^
+		editedFloatField.val = val
+		editedFloatField.delta = delta
+	} else if !clay.PointerOver(clay.ID(id)) && mouse_state == mouse_state_float_field {
+		mouse_state = mouse_state_ui
+	}
+}
+
 base_layout :: proc() -> Layout {
+	reset_string_buffer(&strBuf)
 	clay.BeginLayout()
 	if clay.UI()(
 	{
@@ -336,25 +413,6 @@ base_layout :: proc() -> Layout {
 	return clay.EndLayout()
 }
 
-tab_layout := clay.LayoutConfig {
-	sizing          = sizingExpand,
-	childGap        = 8,
-	layoutDirection = .TopToBottom,
-}
-
-text_header := clay.TextElementConfig {
-	textColor     = COLOR_WHITE,
-	fontSize      = 50,
-	fontId        = 0,
-	textAlignment = .Left,
-}
-
-text_default := clay.TextElementConfig {
-	textColor     = COLOR_WHITE,
-	fontSize      = 18,
-	fontId        = 0,
-	textAlignment = .Center,
-}
 
 track_tab :: proc() {
 	if clay.UI()({id = clay.ID("TrackContainer"), layout = tab_layout}) {
@@ -404,7 +462,6 @@ track_tab :: proc() {
 				selectedLayer,
 				track.StaticLayer.Decor,
 				track.get_layer_name,
-				&selectorBuilder,
 			)
 			if Button("TrackDeleteReference", "Delete model", sizingElem) {
 				if selectedModelReferenceIdx >= 0 {
@@ -417,19 +474,25 @@ track_tab :: proc() {
 		}
 	}
 }
+
 object_tab :: proc() {
 	if clay.UI()({id = clay.ID("ObjectContainer"), layout = tab_layout}) {
 		clay.Text("Objects", &text_header)
 	}
 }
+
 path_tab :: proc() {
 	if clay.UI()({id = clay.ID("PathContainer"), layout = tab_layout}) {
 		clay.Text("Path", &text_header)
 	}
 }
+
+testFloat: f32
+
 materials_tab :: proc() {
 	if clay.UI()({id = clay.ID("MaterialsContainer"), layout = tab_layout}) {
 		clay.Text("Materials", &text_header)
+		FloatField("TestFloatField", &testFloat, &FF_ABOVE_ZERO)
 		if selectedModelReferenceIdx == -1 {
 			clay.Text("Select a model to edit materials", &text_default)
 		} else {
@@ -439,7 +502,6 @@ materials_tab :: proc() {
 				"MaterialIndexSelector",
 				&editedMaterialIndex,
 				len(track.modelReferences[selectedModelReferenceIdx].materials) - 1,
-				&selectorBuilder,
 			)
 			if clay.UI()(
 			{
@@ -480,6 +542,7 @@ materials_tab :: proc() {
 		}
 	}
 }
+
 info_tab :: proc() {
 	if clay.UI()({id = clay.ID("InfoContainer"), layout = tab_layout}) {
 		clay.Text("Info", &text_header)

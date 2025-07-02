@@ -91,8 +91,8 @@ main :: proc() {
 	init_layer_materials()
 	defer destroy_layer_materials()
 
-	init_selector_builder()
-	defer destroy_selector_builder()
+	init_string_buffer(&strBuf)
+	defer delete_string_buffer(&strBuf)
 
 	init_minimap()
 	defer destroy_minimap()
