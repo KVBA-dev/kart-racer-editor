@@ -1,7 +1,6 @@
 package main
 
 import "clay"
-import "core:c/libc"
 import "core:fmt"
 import la "core:math/linalg"
 import "core:mem"
@@ -16,7 +15,6 @@ WINDOW_HEIGHT :: 1080
 dir, file, up, home, plus, minus, cross: rl.Texture
 
 clay_error_handler :: proc "c" (errorData: clay.ErrorData) {
-	libc.printf("Something went wrong\n")
 }
 
 /* TODO:
