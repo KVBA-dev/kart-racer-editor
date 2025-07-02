@@ -2,7 +2,7 @@ package main
 
 import "core:encoding/cbor"
 import "core:fmt"
-import "core:os"
+import os "core:os/os2"
 
 save_cbor :: proc(path: string, data: any) -> bool {
 	encoded, cborerr := cbor.marshal(data)
@@ -22,10 +22,10 @@ load_cbor :: proc(path: string, dst: ^$T) -> bool {
 }
 
 save_to :: proc(path: string, data: []u8) -> bool {
-	handle: os.Handle
+	handle: ^os.File
 	fileerr: os.Error
-	handle, fileerr = os.open(path, os.O_WRONLY | os.O_TRUNC | os.O_CREATE, 0o666)
-	defer if handle != os.INVALID_HANDLE do os.close(handle)
+	handle, fileerr = os.open(path, {.Read, .Write, .Create, .Trunc}, 0o666)
+	defer if handle != nil do os.close(handle)
 	if fileerr != nil {
 		return false
 	}
@@ -41,6 +41,7 @@ load_from :: proc(path: string) -> (data: []u8, ok: bool) {
 		when ODIN_DEBUG do fmt.println(fileerr)
 		return nil, false
 	}
-	data, ok = os.read_entire_file(path)
+	data, fileerr = os.read_entire_file(path, context.allocator)
+	ok = fileerr == nil
 	return
 }
