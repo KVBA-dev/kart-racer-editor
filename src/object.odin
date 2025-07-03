@@ -18,12 +18,22 @@ finish_line := track.FinishLine {
 	spreadZ   = 4,
 }
 
+item_box_row := track.ItemBoxRow {
+	transform = rg.GizmoIdentity(),
+	count     = 5,
+	spread    = 10,
+}
+
 init_track_objects :: proc() {
 	objects = make([dynamic]track.TrackObject)
 }
 
 delete_track_objects :: proc() {
 	delete(objects)
+}
+
+create_item_box_row :: proc() -> track.ItemBoxRow {
+	return item_box_row
 }
 
 render_object :: proc(object: track.TrackObject) {
@@ -68,7 +78,29 @@ render_finish_line :: proc(fl: track.FinishLine) {
 }
 
 render_item_box_row :: proc(ibr: track.ItemBoxRow) {
-
+	an, ax := la.angle_axis_from_quaternion(ibr.transform.rotation)
+	count := math.floor(ibr.count)
+	rlgl.PushMatrix()
+	rlgl.Translatef(
+		ibr.transform.translation.x,
+		ibr.transform.translation.y,
+		ibr.transform.translation.z,
+	)
+	rlgl.Rotatef(an * math.DEG_PER_RAD, ax.x, ax.y, ax.z)
+	if count == 1 {
+		rl.DrawCubeV({0, 0, 0}, {1, 1, 1}, rl.ColorAlpha(rl.GREEN, 0.5))
+		rl.DrawCubeWiresV({0, 0, 0}, {1, 1, 1}, rl.GREEN)
+		rlgl.PopMatrix()
+		return
+	}
+	delta: f32 = 1 / f32(count - 1)
+	pos: f32 = -0.5
+	for _ in 0 ..< count {
+		rl.DrawCubeV({pos * ibr.spread, 0, 0}, {1, 1, 1}, rl.ColorAlpha(rl.GREEN, 0.5))
+		rl.DrawCubeWiresV({pos * ibr.spread, 0, 0}, {1, 1, 1}, rl.GREEN)
+		pos += delta
+	}
+	rlgl.PopMatrix()
 }
 
 get_object_transform :: proc(object: ^track.TrackObject) -> ^rl.Transform {
@@ -87,7 +119,7 @@ check_ray_collision :: proc(ray: rl.Ray, object: track.TrackObject) -> bool {
 	case track.FinishLine:
 		return check_ray_collision_finish_line(ray, o)
 	case track.ItemBoxRow:
-		return false
+		return check_ray_collision_item_box_row(ray, o)
 	case:
 		return false
 	}
@@ -100,4 +132,33 @@ check_ray_collision_finish_line :: proc(ray: rl.Ray, fl: track.FinishLine) -> bo
 	p3 := rl.Vector3Transform(rl.Vector3{-0.5, -0.5, 0}, mat)
 	p4 := rl.Vector3Transform(rl.Vector3{0.5, -0.5, 0}, mat)
 	return rl.GetRayCollisionQuad(ray, p1, p2, p3, p4).hit
+}
+
+check_ray_collision_item_box_row :: proc(ray: rl.Ray, ibr: track.ItemBoxRow) -> bool {
+	box := rl.BoundingBox {
+		min = {-ibr.spread / 2 - 0.5, -0.5, -0.5},
+		max = {ibr.spread / 2 + 0.5, 0.5, 0.5},
+	}
+
+	localRight := la.quaternion_mul_vector3(ibr.transform.rotation, rl.Vector3{1, 0, 0})
+	localUp := la.quaternion_mul_vector3(ibr.transform.rotation, rl.Vector3{0, 1, 0})
+	localForw := la.quaternion_mul_vector3(ibr.transform.rotation, rl.Vector3{0, 0, 1})
+
+	mat := rg.GizmoToMatrix(ibr.transform)
+	localOrigin := ray.position - ibr.transform.translation
+
+	transformedRay := rl.Ray {
+		position  = {
+			la.dot(localOrigin, localRight),
+			la.dot(localOrigin, localUp),
+			la.dot(localOrigin, localForw),
+		},
+		direction = {
+			la.dot(ray.direction, localRight),
+			la.dot(ray.direction, localUp),
+			la.dot(ray.direction, localForw),
+		},
+	}
+
+	return rl.GetRayCollisionBox(transformedRay, box).hit
 }

@@ -38,6 +38,7 @@ Track :: struct {
 	staticModels: []StaticModel,
 	minimap:      MinimapSettings,
 	finishLine:   FinishLine,
+	objects:      []TrackObject,
 }
 
 StaticModel :: struct {
@@ -68,7 +69,7 @@ FinishLine :: struct {
 
 ItemBoxRow :: struct {
 	transform: rl.Transform,
-	count:     int,
+	count:     f32,
 	spread:    f32,
 }
 
@@ -83,4 +84,5 @@ destroy_track :: proc(t: ^Track) {
 		delete(sm.materials)
 	}
 	delete(t.staticModels)
+	delete(t.objects)
 }

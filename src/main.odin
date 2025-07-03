@@ -222,6 +222,7 @@ save :: proc() {
 	track_def := track.Track {
 		staticModels = make([]track.StaticModel, len(track.modelReferences)),
 		minimap = {offset = minimapCam.position.xz, zoom = minimapCam.fovy},
+		objects = make([]track.TrackObject, len(objects) - 1),
 	}
 	defer track.destroy_track(&track_def)
 
@@ -249,6 +250,10 @@ save :: proc() {
 				)
 			}
 		}
+	}
+
+	for o, i in objects[1:] {
+		track_def.objects[i] = o
 	}
 
 	if !save_cbor(save_path, track_def) {
@@ -312,5 +317,9 @@ load :: proc() {
 	minimapCam.position.xz = track_def.minimap.offset
 	minimapCam.target.xz = track_def.minimap.offset
 	minimapCam.fovy = track_def.minimap.zoom
+
+	for o in track_def.objects {
+		append(&objects, o)
+	}
 
 }

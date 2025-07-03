@@ -45,6 +45,7 @@ horizontal_container := clay.ElementDeclaration {
 		sizing = sizingFitVert,
 		childAlignment = {x = .Center, y = .Center},
 		layoutDirection = .LeftToRight,
+		childGap = 8,
 	},
 }
 
@@ -336,6 +337,7 @@ FloatField :: proc(
 	bounds: ^FloatFieldBounds = nil,
 	delta: f32 = 0.1,
 	sizing := sizingElem,
+	format := "%.3f",
 ) {
 
 	bounds := bounds
@@ -350,7 +352,11 @@ FloatField :: proc(
 		cornerRadius = clay.CornerRadiusAll(4),
 	},
 	) {
-		append_string_buffer(&strBuf, fmt.tprintf("%f", val^))
+		if format == FORMAT_WHOLE {
+			append_string_buffer(&strBuf, fmt.tprintf(format, math.floor(val^)))
+		} else {
+			append_string_buffer(&strBuf, fmt.tprintf(format, val^))
+		}
 		clay.TextDynamic(strBuf.current_substring, &text_default)
 	}
 	if clay.PointerOver(clay.ID(id)) && rl.IsMouseButtonPressed(.LEFT) {
@@ -491,7 +497,9 @@ object_tab :: proc() {
 	if clay.UI()({id = clay.ID("ObjectContainer"), layout = tab_layout}) {
 		clay.Text("Objects", &text_header)
 		if Button("AddObject", "Add object", sizingElem) {
-			// TODO:
+			// TODO: add different types of objects
+			append(&objects, create_item_box_row())
+			selectedObject = &objects[len(objects) - 1]
 		}
 		VerticalSeparator(clay.SizingFixed(8))
 		if selectedObject == nil {
@@ -501,7 +509,7 @@ object_tab :: proc() {
 			case track.FinishLine:
 				finish_line_editor(&o)
 			case track.ItemBoxRow:
-			// TODO:
+				item_box_row_editor(&o)
 			case:
 			}
 		}
@@ -518,6 +526,47 @@ finish_line_editor :: proc(fl: ^track.FinishLine) {
 		clay.Text("Spread Z", &text_default)
 		HorizontalSeparator(clay.SizingGrow({}))
 		FloatField("FinishLineSpreadZField", &fl.spreadZ, &FF_ABOVE_ZERO, 0.05)
+	}
+}
+
+item_box_row_count := FloatFieldBounds {
+	min = 1,
+	max = 12,
+}
+
+FORMAT_WHOLE :: "%.0f"
+
+item_box_row_editor :: proc(ibr: ^track.ItemBoxRow) {
+	if clay.UI()(horizontal_container) {
+		clay.Text("Count", &text_default)
+		HorizontalSeparator(clay.SizingGrow({}))
+		FloatField(
+			"ItemBoxRowCountField",
+			&ibr.count,
+			&item_box_row_count,
+			.1,
+			format = FORMAT_WHOLE,
+		)
+	}
+	if clay.UI()(horizontal_container) {
+		clay.Text("Spread", &text_default)
+		HorizontalSeparator(clay.SizingGrow({}))
+		FloatField("ItemBoxRowSpreadField", &ibr.spread, &FF_ABOVE_ZERO, 0.05)
+	}
+	if clay.UI()(horizontal_container) {
+		if Button("CloneItemBoxRow", "Clone") {
+			append(&objects, ibr^)
+			selectedObject = &objects[len(objects) - 1]
+		}
+		if Button("DeleteItemBoxRow", "Delete") {
+			for &o, i in objects {
+				if &o == cast(^track.TrackObject)ibr {
+					unordered_remove(&objects, i)
+					selectedObject = nil
+					break
+				}
+			}
+		}
 	}
 }
 
