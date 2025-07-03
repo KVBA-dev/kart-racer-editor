@@ -33,10 +33,19 @@ sizingFitVert := clay.Sizing {
 	width  = clay.SizingGrow({}),
 	height = clay.SizingFit({}),
 }
+
 tab_layout := clay.LayoutConfig {
 	sizing          = sizingExpand,
 	childGap        = 8,
 	layoutDirection = .TopToBottom,
+}
+
+horizontal_container := clay.ElementDeclaration {
+	layout = {
+		sizing = sizingFitVert,
+		childAlignment = {x = .Center, y = .Center},
+		layoutDirection = .LeftToRight,
+	},
 }
 
 text_header := clay.TextElementConfig {
@@ -273,7 +282,7 @@ NumberSelector :: proc(id: string, val: ^int, max_val: int) {
 		if clay.UI()(
 		{layout = {sizing = sizingExpand, childAlignment = {x = .Center, y = .Center}}},
 		) {
-			append_string_buffer(&strBuf, fmt.tprintf("%f", val^))
+			append_string_buffer(&strBuf, fmt.tprintf("%d", val^))
 
 			clay.TextDynamic(
 				strBuf.current_substring,
@@ -295,6 +304,10 @@ NumberSelector :: proc(id: string, val: ^int, max_val: int) {
 
 VerticalSeparator :: proc(size: clay.SizingAxis) {
 	if clay.UI()({layout = {sizing = {width = clay.SizingGrow({}), height = size}}}) {}
+}
+
+HorizontalSeparator :: proc(size: clay.SizingAxis) {
+	if clay.UI()({layout = {sizing = {width = size, height = clay.SizingGrow({})}}}) {}
 }
 
 FloatFieldBounds :: struct {
@@ -340,13 +353,11 @@ FloatField :: proc(
 		append_string_buffer(&strBuf, fmt.tprintf("%f", val^))
 		clay.TextDynamic(strBuf.current_substring, &text_default)
 	}
-	if clay.PointerOver(clay.ID(id)) && mouse_state == mouse_state_ui {
-		mouse_state = mouse_state_float_field
+	if clay.PointerOver(clay.ID(id)) && rl.IsMouseButtonPressed(.LEFT) {
+		mouse_state = mouse_state_edit_float_field
 		editedFloatField.bounds = bounds^
 		editedFloatField.val = val
 		editedFloatField.delta = delta
-	} else if !clay.PointerOver(clay.ID(id)) && mouse_state == mouse_state_float_field {
-		mouse_state = mouse_state_ui
 	}
 }
 
@@ -382,13 +393,14 @@ base_layout :: proc() -> Layout {
 				mouse_state_idle = mouse_state_idle_track
 				render_scene = render_track_mode
 			}
-			if Button("btnTabStart", "Objects") {
+			if Button("btnTabObjects", "Objects") {
 				current_tab = object_tab
-				render_scene = render_material_mode
+				mouse_state_idle = mouse_state_idle_object
+				render_scene = render_object_mode
 			}
 			if Button("btnTabPath", "Path") {
 				current_tab = path_tab
-				render_scene = render_material_mode
+				render_scene = render_path_mode
 			}
 			if Button("btnTabMaterials", "Materials") {
 				current_tab = materials_tab
@@ -398,7 +410,7 @@ base_layout :: proc() -> Layout {
 			if Button("btnTabInfo", "Info") {
 				current_tab = info_tab
 				mouse_state_idle = mouse_state_idle_info
-				render_scene = render_material_mode
+				render_scene = render_info_mode
 			}
 		}
 		if clay.UI()(
@@ -478,6 +490,34 @@ track_tab :: proc() {
 object_tab :: proc() {
 	if clay.UI()({id = clay.ID("ObjectContainer"), layout = tab_layout}) {
 		clay.Text("Objects", &text_header)
+		if Button("AddObject", "Add object", sizingElem) {
+			// TODO:
+		}
+		VerticalSeparator(clay.SizingFixed(8))
+		if selectedObject == nil {
+			clay.Text("Select an object to edit its properties", &text_default)
+		} else {
+			switch &o in selectedObject^ {
+			case track.FinishLine:
+				finish_line_editor(&o)
+			case track.ItemBoxRow:
+			// TODO:
+			case:
+			}
+		}
+	}
+}
+
+finish_line_editor :: proc(fl: ^track.FinishLine) {
+	if clay.UI()(horizontal_container) {
+		clay.Text("Spread X", &text_default)
+		HorizontalSeparator(clay.SizingGrow({}))
+		FloatField("FinishLineSpreadXField", &fl.spreadX, &FF_ABOVE_ZERO, 0.05)
+	}
+	if clay.UI()(horizontal_container) {
+		clay.Text("Spread Z", &text_default)
+		HorizontalSeparator(clay.SizingGrow({}))
+		FloatField("FinishLineSpreadZField", &fl.spreadZ, &FF_ABOVE_ZERO, 0.05)
 	}
 }
 
@@ -487,12 +527,9 @@ path_tab :: proc() {
 	}
 }
 
-testFloat: f32
-
 materials_tab :: proc() {
 	if clay.UI()({id = clay.ID("MaterialsContainer"), layout = tab_layout}) {
 		clay.Text("Materials", &text_header)
-		FloatField("TestFloatField", &testFloat, &FF_ABOVE_ZERO)
 		if selectedModelReferenceIdx == -1 {
 			clay.Text("Select a model to edit materials", &text_default)
 		} else {
@@ -551,6 +588,8 @@ info_tab :: proc() {
 		) {
 			if Button("btnInfoNew", "New") {
 				track.clear_references()
+				clear(&objects)
+				append(&objects, finish_line)
 			}
 			if Button("btnInfoOpen", "Open") {
 				extensions = extensions_level

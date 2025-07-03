@@ -6,6 +6,7 @@ import la "core:math/linalg"
 import "core:mem"
 import os "core:os/os2"
 import fp "core:path/filepath"
+import rg "raygizmo"
 import "track"
 import rl "vendor:raylib"
 
@@ -18,9 +19,12 @@ clay_error_handler :: proc "c" (errorData: clay.ErrorData) {
 }
 
 /* TODO:
-	  - handle texture deletions: unordered remove
-		- for every model that uses the deleted texture, set the index to -1
-	    - reassign the texture indices of the models that use the texture with last index
+	  - track objects
+	    - ability to move them around when selected
+	    - start/finish line
+		  - snap rotationto 30deg increments
+	    - item boxes
+		  - spread and count
 */
 
 main :: proc() {
@@ -97,6 +101,11 @@ main :: proc() {
 	init_minimap()
 	defer destroy_minimap()
 
+	init_track_objects()
+	defer delete_track_objects()
+
+	append(&objects, finish_line)
+
 	startPath: string
 	oerr: os.Error
 	init_files_array()
@@ -128,6 +137,9 @@ main :: proc() {
 		cam          = &cam,
 	}
 
+	rg.SetCamera(&cam)
+	selectedObject = nil
+
 	defer track.delete_references()
 
 	for !rl.WindowShouldClose() {
@@ -152,6 +164,16 @@ main :: proc() {
 				(axis(.W, .S) * cam_forw) +
 				(axis(.SPACE, .LEFT_SHIFT) * cam.up)
 			cam.target += cam_movement * (rl.IsKeyDown(.LEFT_CONTROL) ? 20 : 10) * dt
+			if rl.IsKeyPressed(.ONE) {
+				activeGizmoFlags = {.Translate}
+			}
+			if rl.IsKeyPressed(.TWO) {
+				activeGizmoFlags = {.Rotate}
+				rg.SetGizmoGlobalAxis({1, 0, 0}, {0, 0, 1}, {0, 1, 0})
+			}
+			if rl.IsKeyPressed(.THREE) {
+				activeGizmoFlags = {.Scale}
+			}
 		} else {
 			edit_input_field(selectedInputField)
 		}
@@ -202,6 +224,8 @@ save :: proc() {
 		minimap = {offset = minimapCam.position.xz, zoom = minimapCam.fovy},
 	}
 	defer track.destroy_track(&track_def)
+
+	track_def.finishLine = objects[0].(track.FinishLine)
 	for &sm, i in track_def.staticModels {
 		sm.filepath, _ = fp.rel(
 			input_field_text(&currentPath),
@@ -244,6 +268,12 @@ load :: proc() {
 	}
 	defer track.destroy_track(&track_def)
 	track.clear_references()
+	clear(&objects)
+	loaded_finish_line := track_def.finishLine
+	if loaded_finish_line == {} {
+		loaded_finish_line = finish_line
+	}
+	append(&objects, loaded_finish_line)
 	for &sm in track_def.staticModels {
 		fpath, err := fp.clean(
 			fp.join({input_field_text(&currentPath), sm.filepath}, context.temp_allocator),

@@ -6,11 +6,12 @@ import "track"
 import rl "vendor:raylib"
 
 MouseData :: struct {
-	cam_rotation:  rl.Quaternion,
-	cam_right:     rl.Vector3,
-	cam_angles:    rl.Vector2,
-	cam:           ^rl.Camera3D,
-	scroll_amount: f32,
+	cam_rotation:    rl.Quaternion,
+	cam_right:       rl.Vector3,
+	cam_angles:      rl.Vector2,
+	cam:             ^rl.Camera3D,
+	scroll_amount:   f32,
+	is_gizmo_active: bool,
 }
 
 highlightedMesh: ^rl.Mesh
@@ -207,8 +208,47 @@ mouse_state_edit_float_field :: proc(using data: ^MouseData) {
 	)
 
 	if rl.IsMouseButtonUp(.LEFT) {
-		mouse_state = mouse_state_float_field
+		mouse_state = mouse_state_ui
 		rl.ShowCursor()
+		return
+	}
+}
+
+mouse_state_idle_object :: proc(using data: ^MouseData) {
+	scroll_amount = rl.GetMouseWheelMove()
+	if clay.PointerOver(clay.ID("Sidebar")) {
+		mouse_state = mouse_state_ui
+		return
+	}
+	if rl.IsMouseButtonPressed(.LEFT) {
+		mouse_state = mouse_state_select_object
+		return
+	}
+	if rl.IsMouseButtonPressed(.RIGHT) {
+		mouse_state = mouse_state_pan
+		return
+	}
+}
+
+mouse_state_select_object :: proc(using data: ^MouseData) {
+	if rl.IsMouseButtonReleased(.LEFT) {
+		if md.is_gizmo_active {
+			md.is_gizmo_active = false
+		} else {
+			newSelectedObject: ^track.TrackObject = nil
+			ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), md.cam^)
+			for &to in objects {
+				if check_ray_collision(ray, to) {
+					newSelectedObject = &to
+					break
+				}
+			}
+			if newSelectedObject != nil && selectedObject == newSelectedObject {
+				data.cam.target = get_object_transform(selectedObject).translation
+			}
+			selectedObject = newSelectedObject
+		}
+		mouse_state = mouse_state_idle
 		return
 	}
 }

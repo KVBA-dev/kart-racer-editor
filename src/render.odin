@@ -1,6 +1,7 @@
 package main
 
 import "core:fmt"
+import rg "raygizmo"
 import "track"
 import rl "vendor:raylib"
 
@@ -82,6 +83,63 @@ render_material_mode :: proc() {
 				col = rl.ColorTint(col, rl.SKYBLUE)
 			}
 			mat.maps[rl.MaterialMapIndex.ALBEDO].color = col
+			rl.DrawMesh(r.model.meshes[i], mat, rl.Matrix(1))
+		}
+	}
+}
+
+render_object_mode :: proc() {
+	for &r in track.modelReferences {
+		for i in 0 ..< r.model.meshCount {
+			mat := r.materials[r.meshMaterial[i]]
+			if r.textureIdx[i] != nil {
+				mat.maps[rl.MaterialMapIndex.ALBEDO].texture = r.textureIdx[i].texture
+			} else {
+				mat.maps[rl.MaterialMapIndex.ALBEDO].texture = whitePixel
+			}
+			mat.maps[rl.MaterialMapIndex.ALBEDO].color = rl.WHITE
+			rl.DrawMesh(r.model.meshes[i], mat, rl.Matrix(1))
+		}
+	}
+
+	for &o in objects {
+		render_object(o)
+	}
+	if selectedObject != nil {
+		transform := get_object_transform(selectedObject)
+		md.is_gizmo_active |= rg.DrawGizmo3D(activeGizmoFlags, transform)
+	}
+}
+
+render_info_mode :: proc() {
+	for &r in track.modelReferences {
+		for i in 0 ..< r.model.meshCount {
+			mat := r.materials[r.meshMaterial[i]]
+			if r.textureIdx[i] != nil {
+				mat.maps[rl.MaterialMapIndex.ALBEDO].texture = r.textureIdx[i].texture
+			} else {
+				mat.maps[rl.MaterialMapIndex.ALBEDO].texture = whitePixel
+			}
+			mat.maps[rl.MaterialMapIndex.ALBEDO].color = rl.WHITE
+			rl.DrawMesh(r.model.meshes[i], mat, rl.Matrix(1))
+		}
+	}
+
+	for &o in objects {
+		render_object(o)
+	}
+}
+
+render_path_mode :: proc() {
+	for &r in track.modelReferences {
+		for i in 0 ..< r.model.meshCount {
+			mat := r.materials[r.meshMaterial[i]]
+			if r.textureIdx[i] != nil {
+				mat.maps[rl.MaterialMapIndex.ALBEDO].texture = r.textureIdx[i].texture
+			} else {
+				mat.maps[rl.MaterialMapIndex.ALBEDO].texture = whitePixel
+			}
+			mat.maps[rl.MaterialMapIndex.ALBEDO].color = rl.WHITE
 			rl.DrawMesh(r.model.meshes[i], mat, rl.Matrix(1))
 		}
 	}
