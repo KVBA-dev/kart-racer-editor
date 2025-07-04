@@ -125,6 +125,7 @@ render_info_mode :: proc() {
 		}
 	}
 
+	render_path(editedPath, false)
 	for &o in objects {
 		render_object(o)
 	}
@@ -141,6 +142,14 @@ render_path_mode :: proc() {
 			}
 			mat.maps[rl.MaterialMapIndex.ALBEDO].color = rl.WHITE
 			rl.DrawMesh(r.model.meshes[i], mat, rl.Matrix(1))
+		}
+	}
+
+	render_path(editedPath)
+	if editedPointIndex >= 0 {
+		if rg.DrawGizmo3D({.Translate}, &editedPointTransform) {
+			md.is_gizmo_active = true
+			move_point(editedPath, editedPointIndex, editedPointTransform.translation)
 		}
 	}
 }

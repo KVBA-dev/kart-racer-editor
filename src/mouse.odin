@@ -8,9 +8,11 @@ import rl "vendor:raylib"
 MouseData :: struct {
 	cam_rotation:    rl.Quaternion,
 	cam_right:       rl.Vector3,
+	cam_forw:        rl.Vector3,
 	cam_angles:      rl.Vector2,
 	cam:             ^rl.Camera3D,
 	scroll_amount:   f32,
+	cam_dist:        f32,
 	is_gizmo_active: bool,
 }
 
@@ -53,6 +55,11 @@ mouse_state_idle_track :: proc(using data: ^MouseData) {
 		mouse_state = mouse_state_select_mesh
 		return
 	}
+	if rl.IsMouseButtonPressed(.MIDDLE) {
+		mouse_state = mouse_state_move
+		rl.HideCursor()
+		return
+	}
 }
 
 mouse_state_idle_info :: proc(using data: ^MouseData) {
@@ -64,6 +71,11 @@ mouse_state_idle_info :: proc(using data: ^MouseData) {
 	}
 	if rl.IsMouseButtonPressed(.RIGHT) {
 		mouse_state = mouse_state_pan
+		rl.HideCursor()
+		return
+	}
+	if rl.IsMouseButtonPressed(.MIDDLE) {
+		mouse_state = mouse_state_move
 		rl.HideCursor()
 		return
 	}
@@ -165,6 +177,11 @@ mouse_state_idle_material :: proc(using data: ^MouseData) {
 		mouse_state = mouse_state_select_material
 		return
 	}
+	if rl.IsMouseButtonPressed(.MIDDLE) {
+		mouse_state = mouse_state_move
+		rl.HideCursor()
+		return
+	}
 }
 
 mouse_state_select_material :: proc(using data: ^MouseData) {
@@ -226,6 +243,12 @@ mouse_state_idle_object :: proc(using data: ^MouseData) {
 	}
 	if rl.IsMouseButtonPressed(.RIGHT) {
 		mouse_state = mouse_state_pan
+		rl.HideCursor()
+		return
+	}
+	if rl.IsMouseButtonPressed(.MIDDLE) {
+		mouse_state = mouse_state_move
+		rl.HideCursor()
 		return
 	}
 }
@@ -251,4 +274,110 @@ mouse_state_select_object :: proc(using data: ^MouseData) {
 		mouse_state = mouse_state_idle
 		return
 	}
+}
+
+mouse_state_idle_path :: proc(using data: ^MouseData) {
+	scroll_amount = rl.GetMouseWheelMove()
+	if editedPath != nil {
+		nearestSegmentIndex = -1
+		min_screen_dist: f32 = 1
+		mouse_pos := rl.GetMousePosition()
+		ray := rl.GetScreenToWorldRay(mouse_pos, cam^)
+		for i in 0 ..< get_num_segments(editedPath) {
+			nearest_w := closest_point_to_ray(editedPath, i, ray)
+			dist_s := distance_from_point_to_ray(nearest_w, ray)
+			if dist_s < min_screen_dist {
+				min_screen_dist = dist_s
+				nearestSegmentIndex = i
+			}
+		}
+	}
+	if clay.PointerOver(clay.ID("Sidebar")) {
+		mouse_state = mouse_state_ui
+		return
+	}
+	if rl.IsMouseButtonPressed(.LEFT) {
+		point, _ := plane_ray_intersection(
+			rl.GetScreenToWorldRay(rl.GetMousePosition(), cam^),
+			cam.target,
+			la.normalize(cam.position - cam.target),
+		)
+		if rl.IsKeyDown(.LEFT_SHIFT) && editedPath != nil {
+			if !editedPath.closed {
+				add_segment(editedPath, point)
+			} else if nearestSegmentIndex != -1 {
+				split_segment(editedPath, point, nearestSegmentIndex)
+			}
+		} else {
+			mouse_state = mouse_state_select_path
+		}
+		return
+	}
+	if rl.IsMouseButtonPressed(.RIGHT) {
+		found := false
+		if editedPath != nil {
+			ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), cam^)
+			idx := 0
+			for idx < len(editedPath.points) {
+				if rl.GetRayCollisionSphere(ray, editedPath.points[idx], 0.4).hit {
+					delete_segment(editedPath, idx)
+					editedPointIndex = -1
+					found = true
+					break
+				}
+				idx += 3
+			}
+
+		}
+		if found {
+			mouse_state = mouse_state_delete_path
+		} else {
+			mouse_state = mouse_state_pan
+			rl.HideCursor()
+		}
+		return
+	}
+	if rl.IsMouseButtonPressed(.MIDDLE) {
+		mouse_state = mouse_state_move
+		rl.HideCursor()
+		return
+	}
+}
+
+mouse_state_select_path :: proc(using data: ^MouseData) {
+	if rl.IsMouseButtonReleased(.LEFT) {
+		if md.is_gizmo_active {
+			md.is_gizmo_active = false
+		} else {
+			editedPointIndex = -1
+			ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), md.cam^)
+			for &p, i in editedPath.points {
+				if rl.GetRayCollisionSphere(ray, p, .4).hit {
+					editedPointTransform.translation = p
+					editedPointIndex = i
+					break
+				}
+			}
+		}
+		mouse_state = mouse_state_idle
+		return
+	}
+}
+
+mouse_state_delete_path :: proc(using data: ^MouseData) {
+	if rl.IsMouseButtonReleased(.RIGHT) {
+		mouse_state = mouse_state_idle
+		return
+	}
+}
+
+mouse_state_move :: proc(using data: ^MouseData) {
+	if rl.IsMouseButtonReleased(.MIDDLE) {
+		mouse_state = mouse_state_idle
+		rl.ShowCursor()
+		return
+	}
+	up := la.cross(cam_right, cam_forw)
+	delta := rl.GetMouseDelta() * la.lerp(f32(.01), f32(0.25), f32(md.cam_dist / 50))
+	cam.target -= (up * -delta.y + cam_right * delta.x)
 }

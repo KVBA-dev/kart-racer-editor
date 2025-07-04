@@ -401,16 +401,22 @@ base_layout :: proc() -> Layout {
 			}
 			if Button("btnTabObjects", "Objects") {
 				current_tab = object_tab
+				selectedObject = nil
 				mouse_state_idle = mouse_state_idle_object
 				render_scene = render_object_mode
 			}
 			if Button("btnTabPath", "Path") {
 				current_tab = path_tab
+				mouse_state_idle = mouse_state_idle_path
+				nearestSegmentIndex = -1
+				editedPointIndex = -1
 				render_scene = render_path_mode
 			}
 			if Button("btnTabMaterials", "Materials") {
 				current_tab = materials_tab
 				mouse_state_idle = mouse_state_idle_material
+				selectedModelReferenceIdx = -1
+				editedMaterialIndex = 0
 				render_scene = render_material_mode
 			}
 			if Button("btnTabInfo", "Info") {

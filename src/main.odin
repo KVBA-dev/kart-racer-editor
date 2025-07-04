@@ -20,11 +20,7 @@ clay_error_handler :: proc "c" (errorData: clay.ErrorData) {
 
 /* TODO:
 	  - track objects
-	    - ability to move them around when selected
-	    - start/finish line
 		  - snap rotationto 30deg increments
-	    - item boxes
-		  - spread and count
 */
 
 main :: proc() {
@@ -106,6 +102,10 @@ main :: proc() {
 
 	append(&objects, finish_line)
 
+	editedPath = make_path({0, 0, 5})
+	defer destroy_path(editedPath)
+	set_closed(editedPath, true)
+
 	startPath: string
 	oerr: os.Error
 	init_files_array()
@@ -129,16 +129,18 @@ main :: proc() {
 	clay.SetMeasureTextFunction(measure_text, nil)
 	layout: clay.ClayArray(clay.RenderCommand)
 
-	cam_dist: f32 = 5
-	cam_forw: rl.Vector3 = {0, 0, 1}
 	dt: f32
 	md = MouseData {
 		cam_rotation = rl.Quaternion(1),
 		cam          = &cam,
+		cam_dist     = 5,
+		cam_forw     = {0, 0, 1},
 	}
 
 	rg.SetCamera(&cam)
 	selectedObject = nil
+
+	rl.SetTargetFPS(60)
 
 	defer track.delete_references()
 
@@ -155,15 +157,10 @@ main :: proc() {
 		if dialogVisible != nil do layout = dialogVisible()
 		else do layout = base_layout()
 
-		cam_forw = la.quaternion_mul_vector3(md.cam_rotation, rl.Vector3{0, 0, 1})
-		md.cam_right = la.normalize(la.cross(cam_forw, cam.up))
+		md.cam_forw = la.quaternion_mul_vector3(md.cam_rotation, rl.Vector3{0, 0, 1})
+		md.cam_right = la.normalize(la.cross(md.cam_forw, cam.up))
 
 		if selectedInputField == nil {
-			cam_movement :=
-				(axis(.D, .A) * md.cam_right) +
-				(axis(.W, .S) * cam_forw) +
-				(axis(.SPACE, .LEFT_SHIFT) * cam.up)
-			cam.target += cam_movement * (rl.IsKeyDown(.LEFT_CONTROL) ? 20 : 10) * dt
 			if rl.IsKeyPressed(.ONE) {
 				activeGizmoFlags = {.Translate}
 			}
@@ -181,14 +178,14 @@ main :: proc() {
 		mouse_state(&md)
 
 		mouseScroll := md.scroll_amount
-		cam_dist = la.clamp(cam_dist - mouseScroll, .1, 50)
+		md.cam_dist = la.clamp(md.cam_dist - mouseScroll, .1, 50)
 
-		cam.position = cam.target - cam_forw * cam_dist
+		cam.position = cam.target - md.cam_forw * md.cam_dist
 
 		rl.BeginDrawing()
 		{
 			render_minimap()
-			rl.ClearBackground(rl.Color{30, 30, 30, 255})
+			rl.ClearBackground(rl.Color{40, 40, 40, 255})
 			if dialogVisible == nil {
 				rl.BeginMode3D(cam)
 				{
@@ -256,6 +253,8 @@ save :: proc() {
 		track_def.objects[i] = o
 	}
 
+	track_def.path = editedPath.points[:]
+
 	if !save_cbor(save_path, track_def) {
 		fmt.println("error on saving")
 	}
@@ -317,6 +316,10 @@ load :: proc() {
 	minimapCam.position.xz = track_def.minimap.offset
 	minimapCam.target.xz = track_def.minimap.offset
 	minimapCam.fovy = track_def.minimap.zoom
+
+	clear(&editedPath.points)
+	append(&editedPath.points, ..track_def.path)
+	defer delete(track_def.path)
 
 	for o in track_def.objects {
 		append(&objects, o)

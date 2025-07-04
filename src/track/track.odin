@@ -39,6 +39,7 @@ Track :: struct {
 	minimap:      MinimapSettings,
 	finishLine:   FinishLine,
 	objects:      []TrackObject,
+	path:         []rl.Vector3,
 }
 
 StaticModel :: struct {
