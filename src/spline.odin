@@ -41,8 +41,8 @@ split_segment :: proc(using path: ^Path, anchor: rl.Vector3, idx: int) {
 	inject_at(&points, idx * 3 + 2, anchor)
 	inject_at(&points, idx * 3 + 2, rl.Vector3{0, 0, 0})
 
-	points[idx * 3 + 4] = 0.5 * (anchor + points[loop_idx(path, idx * 3 + 6)])
-	points[idx * 3 + 2] = 0.5 * (anchor + points[loop_idx(path, idx * 3)])
+	points[idx * 3 + 4] = 0.5 * (anchor + points[loop_idx(path, idx * 3 + 5)])
+	points[idx * 3 + 2] = 0.5 * (anchor + points[loop_idx(path, idx * 3 + 1)])
 }
 
 get_points_in_segment :: proc(using path: ^Path, idx: int) -> [4]rl.Vector3 {

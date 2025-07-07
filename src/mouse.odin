@@ -278,6 +278,7 @@ mouse_state_select_object :: proc(using data: ^MouseData) {
 
 mouse_state_idle_path :: proc(using data: ^MouseData) {
 	scroll_amount = rl.GetMouseWheelMove()
+	closest_point: rl.Vector3
 	if editedPath != nil {
 		nearestSegmentIndex = -1
 		min_screen_dist: f32 = 1
@@ -289,6 +290,7 @@ mouse_state_idle_path :: proc(using data: ^MouseData) {
 			if dist_s < min_screen_dist {
 				min_screen_dist = dist_s
 				nearestSegmentIndex = i
+				closest_point = nearest_w
 			}
 		}
 	}
@@ -306,7 +308,7 @@ mouse_state_idle_path :: proc(using data: ^MouseData) {
 			if !editedPath.closed {
 				add_segment(editedPath, point)
 			} else if nearestSegmentIndex != -1 {
-				split_segment(editedPath, point, nearestSegmentIndex)
+				split_segment(editedPath, closest_point, nearestSegmentIndex)
 			}
 		} else {
 			mouse_state = mouse_state_select_path
@@ -315,7 +317,7 @@ mouse_state_idle_path :: proc(using data: ^MouseData) {
 	}
 	if rl.IsMouseButtonPressed(.RIGHT) {
 		found := false
-		if editedPath != nil {
+		if rl.IsKeyDown(.LEFT_SHIFT) && editedPath != nil {
 			ray := rl.GetScreenToWorldRay(rl.GetMousePosition(), cam^)
 			idx := 0
 			for idx < len(editedPath.points) {
