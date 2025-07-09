@@ -17,6 +17,8 @@ COLOR_BG :: clay.Color{43, 43, 43, 255}
 COLOR_BG_2 :: clay.Color{50, 50, 50, 255}
 COLOR_BUTTON :: clay.Color{85, 85, 85, 255}
 COLOR_BUTTON_SELECTED :: clay.Color{106, 106, 106, 255}
+COLOR_BUTTON_ACTIVE :: clay.Color{6, 184, 0, 255}
+COLOR_BUTTON_ACTIVE_SELECTED :: clay.Color{35, 204, 0, 255}
 COLOR_WHITE :: clay.Color{240, 240, 240, 255}
 
 sizingExpand := clay.Sizing {
@@ -33,6 +35,15 @@ sizingFitVert := clay.Sizing {
 	width  = clay.SizingGrow({}),
 	height = clay.SizingFit({}),
 }
+sizingFitHori := clay.Sizing {
+	width  = clay.SizingFit({}),
+	height = clay.SizingGrow({}),
+}
+
+sizingTopbarButton := clay.Sizing {
+	width  = clay.SizingFixed(34),
+	height = clay.SizingGrow({}),
+}
 
 tab_layout := clay.LayoutConfig {
 	sizing          = sizingExpand,
@@ -43,6 +54,15 @@ tab_layout := clay.LayoutConfig {
 horizontal_container := clay.ElementDeclaration {
 	layout = {
 		sizing = sizingFitVert,
+		childAlignment = {x = .Center, y = .Center},
+		layoutDirection = .LeftToRight,
+		childGap = 8,
+	},
+}
+
+horizontal_container_fit := clay.ElementDeclaration {
+	layout = {
+		sizing = sizingFitHori,
 		childAlignment = {x = .Center, y = .Center},
 		layoutDirection = .LeftToRight,
 		childGap = 8,
@@ -75,32 +95,6 @@ InputFieldData :: struct {
 	builder: st.Builder,
 	endEdit: proc(),
 	maxLen:  int,
-}
-
-StringBuffer :: struct {
-	builder:           st.Builder,
-	current_substring: string,
-}
-
-init_string_buffer :: proc(buf: ^StringBuffer) {
-	st.builder_init(&buf.builder, 20000)
-	buf.current_substring = ""
-}
-
-delete_string_buffer :: proc(buf: ^StringBuffer) {
-	st.builder_destroy(&buf.builder)
-	buf.current_substring = ""
-}
-
-reset_string_buffer :: proc(buf: ^StringBuffer) {
-	st.builder_reset(&buf.builder)
-	buf.current_substring = ""
-}
-
-append_string_buffer :: proc(buf: ^StringBuffer, str: string) {
-	curr_len := st.builder_len(buf.builder)
-	fmt.sbprint(&buf.builder, str)
-	buf.current_substring = string(buf.builder.buf[curr_len:])
 }
 
 init_input_field :: proc(capacity: int = 1024) -> InputFieldData {
@@ -212,6 +206,30 @@ ImageButton :: proc(id: string, texture: ^rl.Texture, sizing := sizingExpand) ->
 	return clay.PointerOver(clay.ID(id)) && rl.IsMouseButtonPressed(.LEFT)
 }
 
+ValueButton :: proc(id, caption: string, var: ^$T, value: T, sizing := sizingExpand) -> bool {
+	col: clay.Color
+	if var^ == value {
+		col =
+			COLOR_BUTTON_ACTIVE_SELECTED if clay.PointerOver(clay.ID(id)) else COLOR_BUTTON_ACTIVE
+	} else {
+		col = COLOR_BUTTON_SELECTED if clay.PointerOver(clay.ID(id)) else COLOR_BUTTON
+	}
+	if clay.UI()(
+	{
+		id = clay.ID(id),
+		layout = {
+			sizing = sizing,
+			padding = clay.PaddingAll(8),
+			childAlignment = {x = .Center, y = .Center},
+		},
+		backgroundColor = col,
+		cornerRadius = clay.CornerRadiusAll(4),
+	},
+	) {
+		clay.TextDynamic(caption, &text_default)
+	}
+	return clay.PointerOver(clay.ID(id)) && rl.IsMouseButtonPressed(.LEFT)
+}
 selectorButtonSizing := clay.Sizing {
 	width  = clay.SizingPercent(0.05),
 	height = clay.SizingGrow({}),
@@ -372,11 +390,91 @@ base_layout :: proc() -> Layout {
 	clay.BeginLayout()
 	if clay.UI()(
 	{
-		id = clay.ID("Viewport"),
-		layout = {sizing = {width = clay.SizingPercent(0.78), height = clay.SizingGrow({})}},
-		backgroundColor = COLOR_CLEAR,
+		layout = {
+			layoutDirection = .TopToBottom,
+			sizing = {width = clay.SizingPercent(0.78), height = clay.SizingGrow({})},
+		},
 	},
-	) {}
+	) {
+		if clay.UI()(
+		{
+			id = clay.ID("Topbar"),
+			layout = {
+				sizing = {width = clay.SizingGrow({}), height = clay.SizingFixed(50)},
+				padding = clay.PaddingAll(8),
+				childGap = 8,
+				childAlignment = {x = .Center, y = .Center},
+			},
+			backgroundColor = COLOR_BG,
+		},
+		) {
+			if ImageButton("TopbarNew", &icons[.File], sizingTopbarButton) {
+				track.clear_references()
+				clear(&objects)
+				append(&objects, finish_line)
+				destroy_path(editedPath)
+				editedPath = make_path({})
+				set_closed(editedPath, true)
+			}
+			if ImageButton("TopbarOpen", &icons[.Directory], sizingTopbarButton) {
+				extensions = extensions_level
+				dialogVisible = file_dialog
+				files.dirty = true
+			}
+			if ImageButton("TopbarSave", &icons[.Save], sizingTopbarButton) {
+				extensions = extensions_level
+				dialogVisible = save_file_dialog
+				save_cbk = save
+				files.dirty = true
+			}
+			HorizontalSeparator(clay.SizingGrow({}))
+			clay.Text("Gizmo", &text_default)
+			if ValueButton(
+				"TopbarTranslate",
+				"T",
+				&gizmoMode,
+				GizmoMode.Translate,
+				sizingTopbarButton,
+			) {
+				gizmoMode = .Translate
+			}
+			if ValueButton("TopbarRotate", "R", &gizmoMode, GizmoMode.Rotate, sizingTopbarButton) {
+				gizmoMode = .Rotate
+			}
+			if ValueButton("TopbarScale", "S", &gizmoMode, GizmoMode.Scale, sizingTopbarButton) {
+				gizmoMode = .Scale
+			}
+			HorizontalSeparator(clay.SizingFixed(8))
+			if ValueButton(
+				"TopbarGlobal",
+				"G",
+				&viewSetting,
+				ViewSetting.Global,
+				sizingTopbarButton,
+			) {
+				viewSetting = .Global
+			}
+			if ValueButton(
+				"TopbarLocal",
+				"L",
+				&viewSetting,
+				ViewSetting.Local,
+				sizingTopbarButton,
+			) {
+				viewSetting = .Local
+			}
+			if ValueButton("TopbarView", "V", &viewSetting, ViewSetting.View, sizingTopbarButton) {
+				viewSetting = .View
+			}
+		}
+		if clay.UI()(
+		{
+			id = clay.ID("Viewport"),
+			layout = {sizing = sizingExpand},
+			backgroundColor = COLOR_CLEAR,
+		},
+		) {}
+	}
 	if clay.UI()(
 	{
 		id = clay.ID("Sidebar"),
@@ -613,7 +711,7 @@ materials_tab :: proc() {
 					clay.Text("Texture", &text_default)
 					if clay.UI()({layout = {sizing = sizingExpand}}) {}
 					img := &ref.textureIdx[editedMaterialIndex].texture
-					if img == nil do img = &plus
+					if img == nil do img = &icons[.Plus]
 					if clay.UI()(
 					{
 						id = clay.ID("MaterialTexturePicker"),

@@ -41,7 +41,7 @@ mouse_state_idle_track :: proc(using data: ^MouseData) {
 		}
 	}
 	scroll_amount = rl.GetMouseWheelMove()
-	if clay.PointerOver(clay.ID("Sidebar")) {
+	if !clay.PointerOver(clay.ID("Viewport")) {
 		mouse_state = mouse_state_ui
 		highlightedMesh = nil
 		return
@@ -64,7 +64,7 @@ mouse_state_idle_track :: proc(using data: ^MouseData) {
 
 mouse_state_idle_info :: proc(using data: ^MouseData) {
 	scroll_amount = rl.GetMouseWheelMove()
-	if clay.PointerOver(clay.ID("Sidebar")) {
+	if !clay.PointerOver(clay.ID("Viewport")) {
 		mouse_state = mouse_state_ui
 		highlightedMesh = nil
 		return
@@ -163,7 +163,7 @@ mouse_state_drag_minimap :: proc(using data: ^MouseData) {
 
 mouse_state_idle_material :: proc(using data: ^MouseData) {
 	scroll_amount = rl.GetMouseWheelMove()
-	if clay.PointerOver(clay.ID("Sidebar")) {
+	if !clay.PointerOver(clay.ID("Viewport")) {
 		mouse_state = mouse_state_ui
 		highlightedMesh = nil
 		return
@@ -233,7 +233,7 @@ mouse_state_edit_float_field :: proc(using data: ^MouseData) {
 
 mouse_state_idle_object :: proc(using data: ^MouseData) {
 	scroll_amount = rl.GetMouseWheelMove()
-	if clay.PointerOver(clay.ID("Sidebar")) {
+	if !clay.PointerOver(clay.ID("Viewport")) {
 		mouse_state = mouse_state_ui
 		return
 	}
@@ -294,7 +294,7 @@ mouse_state_idle_path :: proc(using data: ^MouseData) {
 			}
 		}
 	}
-	if clay.PointerOver(clay.ID("Sidebar")) {
+	if !clay.PointerOver(clay.ID("Viewport")) {
 		mouse_state = mouse_state_ui
 		return
 	}

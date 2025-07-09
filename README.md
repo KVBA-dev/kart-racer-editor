@@ -6,6 +6,7 @@ I mainly did this project for myself, so the code is awful, but it's functional,
 
 Things to add:
 - [ ] More material editor features (colour tint, shaders)
-- [ ] Object editor (start/finish line, item boxes, track features)
-- [ ] Path editor for placement calculation and bot pathfinding
+- [x] Object editor (start/finish line, item boxes, track features)
+- [x] Path editor for placement calculation and bot pathfinding
+- [ ] Keyboard shortcuts and other QoL features
 - [ ] More that come to my mind

@@ -13,7 +13,34 @@ import rl "vendor:raylib"
 WINDOW_WIDTH :: 1920
 WINDOW_HEIGHT :: 1080
 
-dir, file, up, home, plus, minus, cross: rl.Texture
+IconType :: enum {
+	Directory,
+	File,
+	Up,
+	Home,
+	Plus,
+	Minus,
+	Cross,
+	Save,
+	Tick,
+}
+
+GizmoMode :: enum {
+	Translate,
+	Rotate,
+	Scale,
+}
+
+ViewSetting :: enum {
+	Global,
+	Local,
+	View,
+}
+
+icons: [IconType]rl.Texture
+
+gizmoMode := GizmoMode.Translate
+viewSetting := ViewSetting.Global
 
 clay_error_handler :: proc "c" (errorData: clay.ErrorData) {
 }
@@ -60,32 +87,28 @@ main :: proc() {
 	rl.SetExitKey(nil)
 
 	load_font("res/fonts/Roboto.ttf", 50)
-	dir = rl.LoadTexture("res/sprites/dir.png")
-	file = rl.LoadTexture("res/sprites/file.png")
-	up = rl.LoadTexture("res/sprites/up.png")
-	home = rl.LoadTexture("res/sprites/home.png")
-	plus = rl.LoadTexture("res/sprites/plus.png")
-	minus = rl.LoadTexture("res/sprites/minus.png")
-	cross = rl.LoadTexture("res/sprites/cross.png")
-	rl.SetTextureFilter(dir, .BILINEAR)
-	rl.SetTextureFilter(file, .BILINEAR)
-	rl.SetTextureFilter(up, .BILINEAR)
-	rl.SetTextureFilter(home, .BILINEAR)
-	rl.SetTextureFilter(plus, .BILINEAR)
-	rl.SetTextureFilter(minus, .BILINEAR)
-	rl.SetTextureFilter(cross, .BILINEAR)
+	icons = {
+		.Directory = rl.LoadTexture("res/sprites/dir.png"),
+		.File      = rl.LoadTexture("res/sprites/file.png"),
+		.Up        = rl.LoadTexture("res/sprites/up.png"),
+		.Home      = rl.LoadTexture("res/sprites/home.png"),
+		.Plus      = rl.LoadTexture("res/sprites/plus.png"),
+		.Minus     = rl.LoadTexture("res/sprites/minus.png"),
+		.Cross     = rl.LoadTexture("res/sprites/cross.png"),
+		.Save      = rl.LoadTexture("res/sprites/save.png"),
+		.Tick      = rl.LoadTexture("res/sprites/tick.png"),
+	}
+	for &icon in icons {
+		rl.SetTextureFilter(icon, .BILINEAR)
+	}
 	defer {
 		for f in rlFonts {
 			rl.UnloadFont(f)
 		}
 		delete(rlFonts)
-		rl.UnloadTexture(dir)
-		rl.UnloadTexture(file)
-		rl.UnloadTexture(up)
-		rl.UnloadTexture(home)
-		rl.UnloadTexture(plus)
-		rl.UnloadTexture(minus)
-		rl.UnloadTexture(cross)
+		for &icon in icons {
+			rl.UnloadTexture(icon)
+		}
 	}
 
 	init_layer_materials()
@@ -162,15 +185,32 @@ main :: proc() {
 
 		if selectedInputField == nil {
 			if rl.IsKeyPressed(.ONE) {
-				activeGizmoFlags = {.Translate}
+				gizmoMode = .Translate
 			}
 			if rl.IsKeyPressed(.TWO) {
-				activeGizmoFlags = {.Rotate}
-				rg.SetGizmoGlobalAxis({1, 0, 0}, {0, 0, 1}, {0, 1, 0})
+				gizmoMode = .Rotate
 			}
 			if rl.IsKeyPressed(.THREE) {
-				activeGizmoFlags = {.Scale}
+				gizmoMode = .Scale
 			}
+			flags: rg.GizmoFlags
+			switch gizmoMode {
+			case .Translate:
+				flags |= {.Translate}
+			case .Rotate:
+				flags |= {.Rotate}
+			case .Scale:
+				flags |= {.Scale}
+			}
+			switch viewSetting {
+			case .View:
+				flags |= {.View}
+			case .Local:
+				flags |= {.Local}
+			case .Global:
+				rg.SetGizmoGlobalAxis({1, 0, 0}, {0, 0, 1}, {0, 1, 0})
+			}
+			activeGizmoFlags = flags
 		} else {
 			edit_input_field(selectedInputField)
 		}
@@ -178,7 +218,7 @@ main :: proc() {
 		mouse_state(&md)
 
 		mouseScroll := md.scroll_amount
-		md.cam_dist = la.clamp(md.cam_dist - mouseScroll, .1, 50)
+		md.cam_dist = la.clamp(md.cam_dist - mouseScroll, .1, 100)
 
 		cam.position = cam.target - md.cam_forw * md.cam_dist
 

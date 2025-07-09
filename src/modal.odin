@@ -140,7 +140,7 @@ file_dialog :: proc() -> Layout {
 			)
 			if ImageButton(
 				"btnFileListHome",
-				&home,
+				&icons[.Home],
 				{width = clay.SizingFixed(50), height = clay.SizingGrow({})},
 			) {
 
@@ -151,7 +151,7 @@ file_dialog :: proc() -> Layout {
 			}
 			if ImageButton(
 				"btnFileListUp",
-				&up,
+				&icons[.Up],
 				{width = clay.SizingFixed(50), height = clay.SizingGrow({})},
 			) {
 				newPath = fp.dir(input_field_text(&currentPath))
@@ -180,7 +180,12 @@ file_dialog :: proc() -> Layout {
 			for f in st.split_lines_iterator(&paths) {
 				if _, clicked := file_list_item(f, COLOR_BG_2); clicked {
 					if os.is_dir(f) {
-						fmt.sbprintf(&currentPath.builder, "/%s", fp.base(f))
+						when ODIN_OS == .Windows {
+							fmt.sbprintf(&currentPath.builder, "\\%s", fp.base(f))
+						} else {
+
+							fmt.sbprintf(&currentPath.builder, "/%s", fp.base(f))
+						}
 						files.dirty = true
 					} else {
 						if fp.ext(f) == ".klv" {
@@ -253,7 +258,7 @@ save_file_dialog :: proc() -> Layout {
 			)
 			if ImageButton(
 				"btnFileListHome",
-				&home,
+				&icons[.Home],
 				{width = clay.SizingFixed(50), height = clay.SizingGrow({})},
 			) {
 
@@ -264,7 +269,7 @@ save_file_dialog :: proc() -> Layout {
 			}
 			if ImageButton(
 				"btnFileListUp",
-				&up,
+				&icons[.Up],
 				{width = clay.SizingFixed(50), height = clay.SizingGrow({})},
 			) {
 				newPath = fp.dir(input_field_text(&currentPath))
@@ -352,7 +357,7 @@ file_list_item :: proc(filepath: string, col: clay.Color) -> (path: string, clic
 		if clay.UI()(
 		{
 			layout = {sizing = {clay.SizingFixed(32), clay.SizingFixed(32)}},
-			image = {(&dir if is_dir else &file)},
+			image = {&icons[.Directory if is_dir else .File]},
 		},
 		) {}
 		clay.TextDynamic(
@@ -404,7 +409,7 @@ select_texture_dialog :: proc() -> Layout {
 			)
 			if ImageButton(
 				"AddTexture",
-				&plus,
+				&icons[.Plus],
 				{width = clay.SizingFixed(50), height = clay.SizingGrow({})},
 			) {
 				dialogVisible = file_dialog
@@ -498,7 +503,7 @@ select_texture_item :: proc(
 		if clay.UI()({layout = {sizing = sizingExpand}}) {}
 		if ImageButton(
 			st.join({_id, "_delete"}, "", context.temp_allocator),
-			&minus,
+			&icons[.Minus],
 			{clay.SizingFixed(64), clay.SizingFixed(64)},
 		) {
 			for &tr, i in track.textureReferences {
